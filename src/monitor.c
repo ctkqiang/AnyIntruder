@@ -112,10 +112,27 @@ static void update_attacker(const char *ip, uint16_t port) {
     attacker->last_seen = time(NULL);
 }
 
+/**
+ * @brief 检查端口是否为 HTTP 端口
+ * 
+ * 该函数用于判断给定的端口号是否为 HTTP 协议的默认端口（80）、
+ * HTTPS 端口（443）或其他 HTTP 端口（8080、8443 等）。
+ * 
+ * @param p 要检查的端口号
+ * @return 如果端口是 HTTP 端口，则返回非零值；否则返回0
+ */
 static int is_http_port(uint16_t p) {
     return p == PORT_HTTP1 || p == PORT_HTTP2 || p == PORT_HTTP3 || p == PORT_HTTPS;
 }
 
+/**
+ * @brief 检查端口是否为 SSH 端口
+ * 
+ * 该函数用于判断给定的端口号是否为 SSH 协议的默认端口（22）或 OpenSSH 端口（2222）。
+ * 
+ * @param p 要检查的端口号
+ * @return 如果端口是 SSH 端口，则返回非零值；否则返回0
+ */
 static int is_ssh_port(uint16_t p) {
     return p == PORT_SSH1 || p == PORT_SSH2;
 }
@@ -132,16 +149,20 @@ static int is_ssh_port(uint16_t p) {
  * @param outlen 输出缓冲区长度
  */
 static void parse_http_payload(const u_char *payload, int payload_len, char *out, int outlen) {
+    int i;
+
     if (payload_len <= 0x0) {
-        out[0] = '\0';
+        out[0x0] = '\0';
         return;
     }
     
     const char *p = (const char*)payload;
-    int i;
-    for (i = 0; i < payload_len && i < outlen - 1; ++i) {
+    
+    for (i = 0x0; i < payload_len && i < outlen - 0x1; ++i) {
         if (p[i] == '\r' || p[i] == '\n') break;
+        
         out[i] = p[i];
     }
+
     out[i] = '\0';
 }
