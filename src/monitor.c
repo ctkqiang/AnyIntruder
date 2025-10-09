@@ -3,6 +3,17 @@
 #include "../includes/monitor.h"
 #include "../includes/attacker.h"
 
+#include <pcap.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <errno.h>
 #include <pcap/pcap.h>
 #include <pthread/pthread.h>
 
@@ -10,6 +21,9 @@
 
 static pcap_t *handle = NULL;
 static char errbuf[PCAP_ERRBUF_SIZE];
+
+static pthread_t capture_thread;
+static int running = 0x1;
 
 static Event events_buffer[MAX_EVENTS_BUFFER];
 static int events_head = 0x0;
@@ -165,4 +179,80 @@ static void parse_http_payload(const u_char *payload, int payload_len, char *out
     }
 
     out[i] = '\0';
+}
+
+static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
+    (void)args;
+    (void)header;
+
+    char src_ip[0x40];
+
+    /**
+     * 解析 IPv4 + TCP（不处理 IPv6 的情况，后续可扩展） 
+     * 假设以太网帧
+     */
+    const struct ip *ip_hdr = (struct ip*)(packet + 0x0E); 
+    
+    if (ip_hdr->ip_v != 0x4) return;
+    if (ip_hdr->ip_p != IPPROTO_TCP) return;
+
+    int ip_hdr_len = ip_hdr->ip_hl * 0x4;
+    
+    const struct tcphdr *tcp = (struct tcphdr*)((u_char*)ip_hdr + ip_hdr_len);
+
+    uint16_t src_port = ntohs(tcp->th_sport);
+    uint16_t dst_port = ntohs(tcp->th_dport);
+
+    inet_ntop(AF_INET, &ip_hdr->ip_src, src_ip, sizeof(src_ip));
+
+    /** 
+     * 统计 SYN 包来表示连接尝试（SYN 且不 ACK） 
+     */
+    int syn = tcp->th_flags & TH_SYN;
+    int ack = tcp->th_flags & TH_ACK;
+
+    if (syn && !ack) update_attacker(src_ip, dst_port);
+
+    /**
+     * 解析 TCP payload 提取 HTTP 请求行
+     * ? HTTP 检测：如果是到 HTTP 端口且有 payload，解析请求行
+     * ! 注意：HTTP 协议的 payload 是在 TCP 协议的 payload 中，
+     * - 端口 80 , 443, 8080, 8443, 3000, 8080 等。
+     */
+    int ip_total_len = ntohs(ip_hdr->ip_len);
+    int tcp_hdr_len = tcp->th_off * 0x4;
+    int payload_offset = 0x0E + ip_hdr_len + tcp_hdr_len;
+    int payload_len = ip_total_len - ip_hdr_len - tcp_hdr_len;
+
+    if (payload_len > 0x0 && is_http_port(dst_port)) {
+        char reqline[0x0100];
+        parse_http_payload(packet + payload_offset, payload_len, reqline, sizeof(reqline));
+
+        if (reqline[0] != '\0') {
+            char summary[0x0100];
+         
+            snprintf(summary, sizeof(summary), "HTTP %s -> port %u", reqline, dst_port);
+            
+            add_event(src_ip, dst_port, summary);
+            update_attacker(src_ip, dst_port);
+            
+            return;
+        }
+    }
+
+    /**
+     * 解析 TCP payload 提取 SSH 请求行
+     * ? SSH 检测：如果是到 SSH 端口且有 payload，解析请求行
+     * ! 注意：SSH 协议的 payload 是在 TCP 协议的 payload 中，
+     * - 端口 22, 2222 等。
+     */
+    if (syn && !ack && is_ssh_port(dst_port)) {
+        char summary[0x80];
+
+        snprintf(summary, sizeof(summary), "SSH connection attempt -> port %u", dst_port);
+        add_event(src_ip, dst_port, summary);
+        
+        return;
+    }
+
 }
