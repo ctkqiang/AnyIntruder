@@ -181,6 +181,17 @@ static void parse_http_payload(const u_char *payload, int payload_len, char *out
     out[i] = '\0';
 }
 
+/**
+ * @brief 处理捕获到的网络数据包
+ * 
+ * 该函数用于处理通过 `pcap` 捕获到的网络数据包。它会根据数据包的协议类型（IPv4 + TCP）
+ * 进行解析和处理。如果是 HTTP 端口，会提取请求行并记录事件；如果是 SSH 端口，会提取
+ * 请求行并记录事件。同时，会统计 SYN 包来表示连接尝试（SYN 且不 ACK）。
+ * 
+ * @param args 线程参数（未使用）
+ * @param header 数据包头信息指针
+ * @param packet 原始数据包指针
+ */
 static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
     (void)args;
     (void)header;
@@ -255,4 +266,134 @@ static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_c
         return;
     }
 
+    /**
+     * 统计 TCP SYN 包来表示连接尝试（SYN 且不 ACK）
+     */
+    if (syn && !ack) {
+        char summary[0x80];
+
+        snprintf(summary, sizeof(summary), "TCP SYN -> port %u", dst_port);
+        add_event(src_ip, dst_port, summary);
+    }
+}
+
+/**
+ * @brief 捕获线程函数
+ * 
+ * 该函数用于在独立线程中捕获网络数据包。它调用 `pcap_loop` 函数来持续捕获数据包，
+ * 并将每个数据包传递给 `got_packet` 函数进行处理。
+ * 
+ * @param arg 线程参数（未使用）
+ * @return 线程返回值（未使用）
+ */
+static void *capture_thread_fn(void *arg) {
+    (void)arg;
+ 
+    pcap_loop(handle, 0, got_packet, NULL);
+    return NULL;
+}
+
+/**
+ * @brief 初始化监控模块
+ * 
+ * 该函数用于初始化监控模块，包括选择网络接口、打开设备、设置过滤表达式和启动抓包线程。
+ * 
+ * @param iface 网络接口名（可选）
+ * @return 初始化状态码
+ *         - 0x00: 成功
+ *         - -0x01: 查找设备失败
+ *         - -0x02: 打开设备失败
+ *         - -0x03: 编译过滤表达式失败
+ *         - -0x04: 设置过滤表达式失败
+ *         - -0x05: 创建抓包线程失败
+ */
+int monitor_init(const char *iface) {
+    /** 
+     * 选择设备 
+     * 如果提供了接口名，直接使用；否则查找默认设备
+     */
+    char *dev = NULL;
+
+    if (iface && iface[0x0] != '\0') {
+        dev = strdup(iface);
+    } 
+    
+    dev = pcap_lookupdev(errbuf);
+    if (!dev) {
+        fprintf(stderr, "pcap_lookupdev 失败: %s\n", errbuf);
+        return -0x01;
+    }
+    
+    printf("使用设备: %s\n", dev);
+    
+    handle = pcap_open_live(dev, DEFAULT_PCAP_SNAPLEN, DEFAULT_PCAP_PROMISC, DEFAULT_PCAP_TIMEOUT_MS, errbuf);
+    
+    if (!handle) {
+        fprintf(stderr, "pcap_open_live 失败: %s\n", errbuf);
+        return -0x02;
+    }
+
+    /**
+     * 过滤表达式：仅 TCP 端口 80、443、8000、8080、8443、3000、2222
+     */
+    struct bpf_program fp;
+    char filter_exp[] = "tcp";
+    
+    if (pcap_compile(handle, &fp, filter_exp, 0x00, PCAP_NETMASK_UNKNOWN) == -0x01) {
+        fprintf(stderr, "pcap_compile 失败\n");
+        return -0x03;
+    }
+
+    if (pcap_setfilter(handle, &fp) == -0x01) {
+        fprintf(stderr, "pcap_setfilter 失败\n");
+        return -0x04;
+    }
+
+    /**
+     * 启动线程
+     */
+    if (pthread_create(&capture_thread, NULL, capture_thread_fn, NULL) != 0x00) {
+        fprintf(stderr, "创建抓包线程失败\n");
+        return -0x05;
+    }
+
+    return 0x00;
+}
+
+/**
+ * @brief 监控主循环
+ * 
+ * 该函数用于持续运行监控主循环，直到 `running` 标志被设置为 `false`。
+ * 在每次循环中，它会等待 1 秒（通过 `sleep(1)`），然后继续下一次循环。
+ * 
+ * @note 该函数通常在独立线程中运行，用于处理捕获到的网络数据包。
+ */
+void monitor_loop(void) {
+    while (running) sleep(0x01);
+}
+
+/**
+ * @brief 获取事件
+ * 
+ * 该函数用于获取存储在事件缓冲区中的事件。它会将最多 `max` 个事件复制到 `out` 数组中，
+ * 并返回实际复制的事件数量。
+ * 
+ * @param out 事件数组，用于存储获取到的事件
+ * @param max 最大事件数量，即 `out` 数组的大小
+ * @return 实际复制的事件数量
+ */
+int monitor_get_events(Event *out, int max) {
+    pthread_mutex_lock(&events_lock);
+ 
+    int idx = events_head;
+    int count = 0x00;
+
+    while (idx != events_tail && count < max) {
+        out[count++] = events_buffer[idx];
+        idx = (idx + 0x01) % MAX_EVENTS_BUFFER;
+    }
+    
+    pthread_mutex_unlock(&events_lock);
+    
+    return count;
 }
