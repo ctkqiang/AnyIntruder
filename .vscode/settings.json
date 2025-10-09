@@ -58,6 +58,11 @@
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
     "*.embeddedhtml": "html",
-    "cstdint": "cpp"
+    "monitor.h": "c",
+    "pcap.h": "c",
+    "event.h": "c",
+    "complex": "c",
+    "__locale": "c",
+    "ios": "c"
   }
 }
