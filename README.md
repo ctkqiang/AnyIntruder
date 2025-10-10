@@ -3,6 +3,8 @@
 
 基于 libpcap 的实时网络入侵监控（支持 Linux / macOS / FreeBSD / Windows(Npcap)）
 
+![AnyIntruder](./assets/demo.png)
+
 ---
 
 ## 概览
