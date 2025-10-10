@@ -126,7 +126,6 @@ export PKG_CONFIG_PATH="/opt/homebrew/opt/libpcap/lib/pkgconfig:$PKG_CONFIG_PATH
 程序支持命令行与交互方式选择接口、列出设备与无 UI 模式：
 
 ```bash
-./anyintruder --list               # 列出可用 pcap 设备
 sudo ./anyintruder -i en0          # 指定接口
 sudo ./anyintruder -n 2            # 使用 --list 时的编号
 sudo ./anyintruder --no-ui         # 仅运行抓包与日志（适合容器/CI）
