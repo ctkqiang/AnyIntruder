@@ -1,5 +1,9 @@
-#include <cstdint>
-#include <ctime>
+#pragma once
+
+#include <stdint.h>
+
+#ifndef ATTACKER_H
+#define ATTACKER_H
 
 typedef struct Attacker {
     char ip[64];
@@ -8,3 +12,5 @@ typedef struct Attacker {
     time_t last_seen;
     struct Attacker *next;
 } Attacker;
+
+#endif

@@ -63,6 +63,15 @@
     "event.h": "c",
     "complex": "c",
     "__locale": "c",
-    "ios": "c"
+    "ios": "c",
+    "unistd.h": "c",
+    "string.h": "c",
+    "stdlib.h": "c",
+    "ncurses.h": "c",
+    "ui.h": "c",
+    "config.h": "c",
+    "logger.h": "c",
+    "attacker.h": "c",
+    "cstdint": "c"
   }
 }

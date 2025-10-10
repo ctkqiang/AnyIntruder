@@ -1,4 +1,10 @@
-#include <cstdint>
+#pragma once
+
+#include <stdint.h>
+
+#ifndef EVENT_H
+#define EVENT_H
+
 #include <time.h>
 
 typedef struct Event {
@@ -7,3 +13,5 @@ typedef struct Event {
     char summary[256]; 
     time_t ts;
 } Event;
+
+#endif

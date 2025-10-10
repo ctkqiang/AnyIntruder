@@ -2,6 +2,7 @@
 #include "../includes/event.h"
 #include "../includes/monitor.h"
 #include "../includes/attacker.h"
+#include "../includes/logger.h"
 
 #include <pcap.h>
 #include <stdio.h>
@@ -211,7 +212,7 @@ static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_c
     
     const struct tcphdr *tcp = (struct tcphdr*)((u_char*)ip_hdr + ip_hdr_len);
 
-    uint16_t src_port = ntohs(tcp->th_sport);
+    // uint16_t src_port = ntohs(tcp->th_sport);
     uint16_t dst_port = ntohs(tcp->th_dport);
 
     inet_ntop(AF_INET, &ip_hdr->ip_src, src_ip, sizeof(src_ip));
@@ -312,21 +313,45 @@ int monitor_init(const char *iface) {
      * 选择设备 
      * 如果提供了接口名，直接使用；否则查找默认设备
      */
-    char *dev = NULL;
+    char *dev_name = NULL;
+    pcap_if_t *alldevs, *d;
 
-    if (iface && iface[0x0] != '\0') {
-        dev = strdup(iface);
-    } 
-    
-    dev = pcap_lookupdev(errbuf);
-    if (!dev) {
-        fprintf(stderr, "pcap_lookupdev 失败: %s\n", errbuf);
+    if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+        fprintf(stderr, "pcap_findalldevs 失败: %s\n", errbuf);
         return -0x01;
     }
+
+    if (iface && iface[0x0] != '\0') {
+        for (d = alldevs; d != NULL; d = d->next) {
+            if (strcmp(iface, d->name) == 0) {
+                dev_name = strdup(d->name);
+                break;
+            }
+        }
+        if (!dev_name) {
+            fprintf(stderr, "未找到指定设备: %s\n", iface);
+            pcap_freealldevs(alldevs);
+            return -0x01;
+        }
+    } else {
+        // Use the first device if no interface is specified
+        if (alldevs != NULL) {
+            dev_name = strdup(alldevs->name);
+        } else {
+            fprintf(stderr, "未找到任何设备\n");
+            pcap_freealldevs(alldevs);
+            return -0x01;
+        }
+    }
+    pcap_freealldevs(alldevs); // Free the device list
     
-    printf("使用设备: %s\n", dev);
+    printf("使用设备: %s\n", dev_name);
     
-    handle = pcap_open_live(dev, DEFAULT_PCAP_SNAPLEN, DEFAULT_PCAP_PROMISC, DEFAULT_PCAP_TIMEOUT_MS, errbuf);
+    handle = pcap_open_live(dev_name, DEFAULT_PCAP_SNAPLEN, DEFAULT_PCAP_PROMISC, DEFAULT_PCAP_TIMEOUT_MS, errbuf);
+    
+    if (dev_name) {
+        free(dev_name); // Free the duplicated device name
+    }
     
     if (!handle) {
         fprintf(stderr, "pcap_open_live 失败: %s\n", errbuf);
@@ -396,4 +421,88 @@ int monitor_get_events(Event *out, int max) {
     pthread_mutex_unlock(&events_lock);
     
     return count;
+}
+
+static int cmp_attacker(const void *a, const void *b) {
+    const Attacker *aa = *(const Attacker**)a;
+    const Attacker *bb = *(const Attacker**)b;
+ 
+    if (aa->total_hits > bb->total_hits) return -1;
+    if (aa->total_hits < bb->total_hits) return 1;
+ 
+    return 0;
+}
+
+int monitor_get_top(Attacker **out, int max) {
+    pthread_mutex_lock(&attackers_lock);
+
+    int cnt = 0;
+    Attacker *cur = attackers;
+    
+    while (cur && cnt < 10000) {
+        ++cnt;
+        cur = cur->next;
+    }
+    
+    if (cnt == 0) {
+        pthread_mutex_unlock(&attackers_lock);
+        return 0;
+    }
+    
+    Attacker **arr = (Attacker**)malloc(sizeof(Attacker*) * cnt);
+    
+    cur = attackers;
+    
+    int i = 0;
+    
+    while (cur) {
+        arr[i++] = cur;
+        cur = cur->next;
+    }
+    
+    qsort(arr, cnt, sizeof(Attacker*), cmp_attacker);
+    
+    int ret = 0;
+    
+    for (i = 0; i < cnt && ret < max; ++i) {
+        Attacker *copy = (Attacker*)calloc(1, sizeof(Attacker));
+    
+        *copy = *arr[i];
+        copy->next = NULL;
+    
+        out[ret++] = copy;
+    }
+    
+    free(arr);
+    
+    pthread_mutex_unlock(&attackers_lock);
+    
+    return ret;
+}
+
+void monitor_shutdown(void) {
+    if (handle) {
+        pcap_breakloop(handle);
+        pcap_close(handle);
+
+        handle = NULL;
+    }
+    
+    running = 0;
+    
+    pthread_cancel(capture_thread);
+    pthread_join(capture_thread, NULL);
+    pthread_mutex_lock(&attackers_lock);
+    
+    Attacker *cur = attackers;
+    
+    while (cur) {
+        Attacker *n = cur->next;
+        free(cur);
+        cur = n;
+    }
+    
+    attackers = NULL;
+    
+    pthread_mutex_unlock(&attackers_lock);
 }
