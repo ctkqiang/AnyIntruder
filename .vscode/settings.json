@@ -72,6 +72,7 @@
     "config.h": "c",
     "logger.h": "c",
     "attacker.h": "c",
-    "cstdint": "c"
+    "cstdint": "c",
+    "cstring": "c"
   }
 }
