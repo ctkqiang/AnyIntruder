@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <Kernel/sys/stat.h>
 
-#include "./includes/file_utilities.h"
+#include "../includes/file_utilities.h"
 
 /**
  * @brief 读取文件到字符串

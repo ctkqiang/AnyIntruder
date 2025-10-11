@@ -5,7 +5,7 @@
 #include "../includes/http_client.h"
 #include "../includes/platform.h"
 
-#define PORT 443
+#define PORT "443"
 #define USER_AGENT "AnyIntruderWebhook/1.0"
 #define CONTENT_TYPE "application/json"
 

@@ -118,6 +118,7 @@
     "stack": "c",
     "file_utilities.h": "c",
     "cerrno": "c",
-    "bitset": "c"
+    "bitset": "c",
+    "telegram.h": "c"
   }
 }

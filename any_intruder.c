@@ -10,6 +10,7 @@
 #include "./includes/monitor.h"
 #include "./includes/logger.h"
 #include "./includes/platform.h"
+#include "./includes/file_utilities.h"
 #include "./includes/platform_webhook.h"
 #include "./includes/ui.h"
 
@@ -69,7 +70,7 @@ static void handle_sigint(int sig) {
 int send_to(Platform Platform, const char *log_content) {
     switch (Platform) {
         case PLATFORM_TELEGRAM:
-            return send_telegram_message(log_content);
+            return telegram_send_message(log_content);
         default:
             return -0x1;
     }

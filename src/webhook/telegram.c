@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "../../includes/platform.h"
 #include "../../includes/http_client.h"

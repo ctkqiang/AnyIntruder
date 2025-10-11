@@ -12,4 +12,6 @@ extern "C" {
 }
 #endif
 
+int telegram_send_message(const char *text);
+
 #endif

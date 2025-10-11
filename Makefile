@@ -1,7 +1,7 @@
 CC := gcc
 PKG := pkg-config
 TARGET := anyintruder
-SRCS := any_intruder.c src/monitor.c src/logger.c src/ui.c
+SRCS := any_intruder.c src/monitor.c src/logger.c src/ui.c src/file_utilities.c src/webhook/telegram.c src/platform_webhook.c src/http_client.c
 OBJS := $(SRCS:.c=.o)
 
 BREW_PCAP := $(shell command -v brew >/dev/null 2>&1 && brew --prefix libpcap 2>/dev/null || echo)
