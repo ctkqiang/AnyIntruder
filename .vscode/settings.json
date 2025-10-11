@@ -112,6 +112,7 @@
     "platform.h": "c",
     "errno.h": "c",
     "stdio.h": "c",
-    "platform_webhook.h": "c"
+    "platform_webhook.h": "c",
+    "cmath": "cpp"
   }
 }

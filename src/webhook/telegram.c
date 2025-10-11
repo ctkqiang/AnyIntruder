@@ -10,8 +10,12 @@
 #define CONTENT_TYPE "application/json"
 #define CONFIG_PATH "../../config.yaml"
 
-#define TELEGRAM_API_URL "https://api.telegram.org/bot%s/sendMessage"
-
+/**
+ * @brief 从配置文件中获取指定键的值
+ * 
+ * @param key 配置项的键名
+ * @return char* 键对应的值，若未找到或发生错误则返回 NULL
+ */
 static char *yaml_get_value(const char *key) {
     FILE *fp = fopen(CONFIG_PATH, "r");
 
@@ -50,6 +54,13 @@ static char *yaml_get_value(const char *key) {
     return result;
 }
 
+
+/**
+ * @brief 发送 Telegram 消息
+ * 
+ * @param text 要发送的消息文本
+ * @return int 发送状态码，0x0 表示成功，-0x1 表示失败
+ */
 int telegram_send_message(const char *text) {
     char *token = yaml_get_value("bot_token");
     char *chat_id = yaml_get_value("chat_id");
@@ -66,7 +77,7 @@ int telegram_send_message(const char *text) {
         return -0x1;
     }
 
-    snprintf(url, sizeof(url), TELEGRAM_API_URL, token);
+    snprintf(url, sizeof(url), "https://api.telegram.org/bot%s/sendMessage", token);
     snprintf(
         json, 
         sizeof(json), 
@@ -79,6 +90,6 @@ int telegram_send_message(const char *text) {
 
     free(token);
     free(chat_id);
-    
+
     return rc;
 }
