@@ -100,15 +100,17 @@ static void draw_top(WINDOW *win) {
 
         int bx = width - 0x2 - bar_max_w;
         if (has_colors()) wattron(win, COLOR_PAIR(CP_BOX));
+
         for (int b = 0x0; b < bar_max_w; ++b) {
             if (b < bar_w) {
                 if (has_colors()) wattron(win, A_REVERSE);
                 mvwprintw(win, y, bx + b, " ");
                 if (has_colors()) wattroff(win, A_REVERSE);
-            } else {
-                mvwprintw(win, y, bx + b, " ");
             }
+            
+            mvwprintw(win, y, bx + b, " ");
         }
+        
         if (has_colors()) wattroff(win, COLOR_PAIR(CP_BOX));
 
         free(a);

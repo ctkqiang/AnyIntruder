@@ -38,4 +38,4 @@ run: all
 	./$(TARGET)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(TARGET) && rm -f $(TARGET).log

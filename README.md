@@ -1,185 +1,189 @@
-
 # AnyIntruder
 
-基于 libpcap 的实时网络入侵监控（支持 Linux / macOS / FreeBSD / Windows(Npcap)）
+基于 libpcap 的实时网络入侵监控工具（支持 Linux / macOS / FreeBSD / Windows via Npcap）
 
 ![AnyIntruder](./assets/demo.png)
 
----
+实时抓包并可视化展示 TCP 流量中的常见扫描与攻击尝试，支持 HTTP / HTTPS / SSH / SYN 等流量摘要与事件统计。UI 使用终端界面（ncurses），适合在服务器或研究环境里快速观测网络异常。
 
-## 概览
-
-AnyIntruder 用于实时捕获并可视化展示 TCP 流量中常见的扫描与攻击尝试（HTTP / HTTPS / SSH / SYN 等）。  
-程序包含：抓包模块、事件缓冲、攻击者统计与终端 UI（ncurses）。
-
-**要点**：抓包通常需要 `root` 权限或等效 capability（Linux 可使用 `setcap`）。
+> 要点：抓包通常需要 root 权限或等效 capability（Linux 可用 `setcap` 赋能）。
 
 ---
 
-## 快速使用（示例）
+## 亮点一览
 
-在多数平台上先列出可用接口，然后以 `root` 或具有抓包权限的方式运行：
+* 实时解析 HTTP 请求行并展示摘要
+* 对 HTTPS 尝试提取 ClientHello 的 SNI 信息（后续数据标注为 [ENCRYPTED/BINARY]）
+* 环形事件缓冲，超出即覆盖最旧事件
+* 轻量 CLI，可选把告警发送到第三方平台（Telegram 等）
+* 支持主流类 Unix 系统，Windows 可通过 Npcap 支持
 
-### 列设备
+---
+
+## 快速开始
+
+### 列出可用网络接口
 
 ```bash
+# Linux / macOS 通用方式（tcpdump 必须安装）
 sudo tcpdump -D
-# 或 macOS
+
+# macOS 也可
 ifconfig -a
-````
-
-### 运行示例
-
-```bash
-sudo ./anyintruder en0     # macOS: 主网卡（或 eth0，视系统而定）
-sudo ./anyintruder eth0    # Linux: 有线/主网卡
-sudo ./anyintruder lo      # 本地回环（针对 127.0.0.1 测试）
-sudo ./anyintruder any     # Linux-only: 抓取所有接口流量
 ```
 
-<details>
-<summary>建议：如何快速产生可见事件（开发调试）</summary>
+### 运行示例（使用短/长参数）
 
-在另一终端启动简单 HTTP 服务并触发请求：
+```bash
+# 短参数
+sudo ./anyintruder -i en0 -s telegram
+
+# 长参数
+sudo ./anyintruder --interface=en0 --sendto=telegram
+```
+
+行为说明：`-s` 或 `--sendto` 为可选带值参数，如果用户只写了 `-s` 而没有值，程序会忽略该选项并继续正常运行，消息发送逻辑由别的模块在运行时决定。
+
+---
+
+## 支持的平台（Webhook / Bot）
+
+AnyIntruder 支持多种即时通信与协作平台，通过 Webhook 或 Bot API 实时推送网络入侵告警。
+所有发送逻辑集中于 `platform_webhook.c`，可统一配置并扩展。
+
+| 平台名 (参数值)  | 类型      | 描述                                     |
+| ---------- | ------- | -------------------------------------- |
+| `telegram` | Bot API | 通过 Telegram Bot 推送消息到群组或频道             |
+| `slack`    | Webhook | 使用 Slack Incoming Webhook 发送 JSON 格式通知 |
+| `discord`  | Webhook | 兼容 Discord 官方 Webhook API              |
+| `msteams`  | Webhook | 支持 Microsoft Teams Connector 格式        |
+| `dingtalk` | Webhook | 钉钉机器人消息推送                              |
+| `wechat`   | Webhook | 企业微信自定义机器人接口                           |
+| `feishu`   | Webhook | 飞书群机器人接口                               |
+
+
+---
+
+## 快速制造测试事件（开发调试小技巧）
+
+在另一个终端启动简单 HTTP 服务并触发请求：
 
 ```bash
 python3 -m http.server 8000
 curl http://127.0.0.1:8000
-ssh -p 22 127.0.0.1   # 触发 SSH 尝试（会要求密码）
+ssh -p 22 127.0.0.1   # 触发本机 SSH 尝试
 ```
 
-注意：若你使用回环 (`lo` / `lo0`)，运行 AnyIntruder 时应指定该接口或确保选取器选择了回环。
-
-</details>
-
-<details>
-<summary>权限替代方案（Linux）</summary>
-
-```bash
-# 给可执行文件赋予抓包能力（不需要 sudo 运行）
-sudo setcap cap_net_raw,cap_net_admin+ep ./anyintruder
-./anyintruder enp3s0
-```
-
-</details>
+如果抓取回环接口（lo / lo0），运行 AnyIntruder 时请指定回环接口。
 
 ---
 
-## 平台指南（摘要）
+## 平台依赖与安装
 
-<details>
-<summary>Linux</summary>
-
-**安装依赖（Debian/Ubuntu）：**
+### Linux (Debian / Ubuntu)
 
 ```bash
 sudo apt update
 sudo apt install build-essential pkg-config libpcap-dev libncurses-dev
 ```
 
-接口示例： `lo`, `eth0`, `wlan0`, `docker0`, `any`（Linux 专用）
+接口示例：`lo`, `eth0`, `wlan0`, `docker0`, `any`（Linux 专用）
 
-</details>
-
-<details>
-<summary>macOS</summary>
-
-**安装依赖（Homebrew）：**
+### macOS (Homebrew)
 
 ```bash
 brew install pkg-config libpcap ncurses
 export PKG_CONFIG_PATH="/opt/homebrew/opt/libpcap/lib/pkgconfig:$PKG_CONFIG_PATH"
 ```
 
-接口示例： `lo0`, `en0`, `en1`, `awdl0`
+接口示例：`lo0`, `en0`, `en1`, `awdl0`
 
-</details>
+### FreeBSD
 
-<details>
-<summary>FreeBSD</summary>
+通常自带 libpcap，若缺少可用 `pkg` 安装 ncurses 等。接口示例：`lo0`, `em0`
 
-通常自带 libpcap，若缺少可用 `pkg` 安装 ncurses 等。
-接口示例： `lo0`, `em0`, `bridge0`
+### Windows
 
-</details>
-
-<details>
-<summary>Windows (Npcap) / WSL</summary>
-
-原生 Windows 请安装 Npcap 并以管理员运行；推荐在 WSL2 中运行 Linux 版本进行开发。
-
-</details>
+原生 Windows 请安装 Npcap 并以管理员运行。开发时也可以考虑在 WSL2 内运行 Linux 版本。
 
 ---
 
-## 功能要点与限制
+## 构建与编译
 
-* 实时解析 HTTP 请求行（若 payload 可读）并显示摘要。
-* HTTPS 为加密流量，只能尝试解析 `ClientHello` 的 SNI；后续数据一律标注为 `[ENCRYPTED/BINARY]`。
-* 仅支持 IPv4（当前实现）；IPv6 可后续扩展。
-* 事件缓冲为环形队列，满后覆盖最旧记录。
-
----
-
-## 开发者友好（可用开关、调试）
-
-程序支持命令行与交互方式选择接口、列出设备与无 UI 模式：
+项目使用标准 Makefile 或 CMake。下面给出最简单的 gcc 编译参考：
 
 ```bash
-sudo ./anyintruder -i en0          # 指定接口
-sudo ./anyintruder -n 2            # 使用 --list 时的编号
-sudo ./anyintruder --no-ui         # 仅运行抓包与日志（适合容器/CI）
+# 从仓库根目录
+gcc -Iincludes src/*.c src/webhook/*.c any_intruder.c -o build/any_intruder -lcurl
 ```
 
-<details>
-<summary>调试技巧</summary>
+或者使用 CMake（推荐长期维护）：
 
-1. 使用 `tcpdump` 验证接口是否确实有流量：
+```bash
+mkdir -p build
+cd build
+cmake ..
+make
+```
+
+---
+
+## 配置示例（config.yaml）
+
+放在项目根目录，轻量 YAML 用法示例：
+
+```yaml
+telegram:
+  bot_token: 7958021051:YOUR_TOKEN_HERE
+  chat_id: -1001700768700
+```
+
+说明：仓库内提供 `config.example.yaml`，请基于该文件填写实际配置。生产环境请使用 secrets 管理，不要把 token 推到远程仓库。
+
+---
+
+## 调试与开发提示
+
+* 使用 `tcpdump` 验证接口是否有流量：
 
 ```bash
 sudo tcpdump -i en0 tcp port 80
 ```
 
-2. 在 `monitor.c` 的 `got_packet` 回调加临时 debug 输出：
+* 在 `monitor.c` 的 `got_packet` 回调加临时 debug 输出以快速排查：
 
 ```c
 fprintf(stderr, "got_packet len=%u\n", header->len);
 ```
 
-3. 开发时可注入测试事件，快速验证 UI 渲染与日志功能。
-
-</details>
+* 可注入测试事件来验证 UI 渲染与日志功能，避免每次都真实抓包调试。
 
 ---
 
-## 示例：典型启动流程
+## 使用示例：典型启动流程
 
 ```bash
-# 列设备
-sudo tcpdump -D
+# macOS 启动并指定接口
+sudo ./anyintruder --interface=en0
 
-# 运行 AnyIntruder（macOS）
-sudo ./anyintruder en0
+# macOS 并请求发送到 Telegram（发送逻辑在别处实现）
+sudo ./anyintruder --interface=en0 --sendto=telegram
 
-# 本机测试（回环）
-sudo ./anyintruder lo0   # macOS
-sudo ./anyintruder lo    # Linux
-
-# Linux 全接口抓包（仅 Linux 支持）
-sudo ./anyintruder any
+# Linux 全接口（Linux-only）
+sudo ./anyintruder --interface=any
+sudo ./anyintruder --interface=any --sendto=wechat
 ```
 
 ---
 
 ## 贡献指南
 
-欢迎提交 Issue 和 Pull Request 来帮助改进这个项目！
+欢迎 PR 与 Issue。基本流程：
 
-1. Fork 本仓库
-2. 创建您的特性分支 (git checkout -b feature/AmazingFeature)
-3. 提交您的更改 (git commit -m 'Add some AmazingFeature')
-4. 推送到分支 (git push origin feature/AmazingFeature)
-5. 打开一个 Pull Request
+1. Fork 仓库
+2. 新建分支 `git checkout -b feature/YourThing`
+3. 提交修改 `git commit -m "feat: describe"`
+4. Push 并发起 PR
 
 ---
 
