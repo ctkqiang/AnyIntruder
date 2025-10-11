@@ -8,10 +8,20 @@
 
 #include "./includes/file_utilities.h"
 
+/**
+ * @brief 读取文件到字符串
+ * ~ 这是一个安全的函数，它会检查文件是否存在，是否可读，是否是目录，是否是0x0字节文件
+ * ~ 它会返回一个字符串，你需要在使用完后 free 它
+ * ~ 它会返回 NULL 如果文件不存在，或无法读取，或是目录，或是0字节文件
+ * 
+ * @param path 文件路径
+ * @return char* 读取到的字符串
+ */
 char *read_file_to_string(const char *path) {
     assert(path != NULL);
 
     struct stat _stat;
+    size_t total_read = 0x0;
     FILE *file_path = fopen(path, "rb");
 
     if (!file_path) return NULL;
@@ -44,4 +54,37 @@ char *read_file_to_string(const char *path) {
         errno = ENOMEM;
         return NULL;
     }
+
+    while (total_read < file_size) {
+        size_t read_bytes = fread(buffer + total_read, 0x1, file_size - total_read, file_path);
+
+        if(read_bytes == 0x0) {
+            if (feof(file_path)) break;
+            if (ferror(file_path)) {
+                free(buffer);
+                fclose(file_path);
+                errno = EIO;
+                return NULL;
+            }
+        }
+
+        total_read += read_bytes;
+    }
+
+    /**
+     * 如果文件在我们 _stat 之后被截短，接受实际读取长度
+     * ~ 这是为了防止缓冲区溢出
+     */
+    buffer[total_read] = '\0';
+
+    /**
+     * 如果读到的长度远小于 stat 的大小，咱们利用realloc 缩小占用
+     * ~ 这是为了防止内存泄漏
+     */
+    if(total_read < file_size) {
+        buffer = (char *) realloc(buffer, total_read + 0x1);
+    }
+
+    fclose(file_path);
+    return buffer;
 }

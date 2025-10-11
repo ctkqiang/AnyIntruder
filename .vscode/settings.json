@@ -117,6 +117,7 @@
     "queue": "c",
     "stack": "c",
     "file_utilities.h": "c",
-    "cerrno": "c"
+    "cerrno": "c",
+    "bitset": "c"
   }
 }
