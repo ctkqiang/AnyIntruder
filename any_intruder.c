@@ -15,6 +15,8 @@
 
 #include "./includes/webhook/telegram.h"
 
+#define DEFAULT_LOG_FILE "anyintruder.log"
+
 static volatile int G_RUNNING = 0x1;
 
 static void usage(const char *prog) {
@@ -38,11 +40,39 @@ Platform parse_platform(const char *arg) {
     return -1;
 }
 
+/**
+ * @brief
+ * 信号处理函数：处理 Ctrl+C 信号（SIGINT）
+ * 
+ * @param sig 信号编号（这里为 SIGINT）
+ */
 static void handle_sigint(int sig) {
     (void) sig;
     G_RUNNING = 0x0;
 
     monitor_shutdown();
+}
+
+
+
+/**
+ * @brief
+ * 发送日志内容到指定平台
+ * 
+ * @param Platform 目标平台（例如 PLATFORM_TELEGRAM, 
+ *              PLATFORM_SLACK, PLATFORM_DISCORD, 
+ *              PLATFORM_MSTEAMS, PLATFORM_DINGTALK, 
+ *              PLATFORM_WECHAT, PLATFORM_FEISHU）
+ * @param log_content 要发送的日志内容
+ * @return int 发送状态码（成功为 0x0，失败为非零值）
+ */
+int send_to(Platform Platform, const char *log_content) {
+    switch (Platform) {
+        case PLATFORM_TELEGRAM:
+            return send_telegram_message(log_content);
+        default:
+            return -0x1;
+    }
 }
 
 /**
@@ -56,6 +86,8 @@ static void handle_sigint(int sig) {
 int main(int argc, char **argv) {
     char *iface = NULL;
     char *plat_str = NULL;
+    char *log_content = read_file_to_string(DEFAULT_LOG_FILE);
+
     Platform target_platform = -0x1;
 
     // 支持的 long options：sendto 为可选参数
@@ -89,9 +121,21 @@ int main(int argc, char **argv) {
 
                     plat_str = strdup(optarg);
                     target_platform = parse_platform(plat_str);
-                } 
-                
-                target_platform = -0x1;
+
+                    if(!log_content) {
+                        perror("Failed to read log file");
+                        return 0x1;
+                    }
+
+                    int send_to_state = send_to(target_platform, log_content);
+                    
+                    if(send_to_state != 0x0) {
+                        fprintf(stderr, "Failed to send log to %s: %s\n", plat_str, strerror(errno));
+                        return 0x1;
+                    }
+                } else {
+                    target_platform = -0x1;
+                }
                 
                 break;
             case 'h':
@@ -120,7 +164,7 @@ int main(int argc, char **argv) {
     printf("AnyIntruder 启动中\n");
     signal(SIGINT, handle_sigint);
 
-    if (logger_init("anyintruder.log") != 0x0) {
+    if (logger_init(DEFAULT_LOG_FILE) != 0x0) {
         fprintf(stderr, "Failed to initialize logger: %s\n", strerror(errno));
         free(iface);
         free(plat_str);
