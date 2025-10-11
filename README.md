@@ -116,6 +116,11 @@ export PKG_CONFIG_PATH="/opt/homebrew/opt/libpcap/lib/pkgconfig:$PKG_CONFIG_PATH
 # 从仓库根目录
 gcc -Iincludes src/*.c src/webhook/*.c any_intruder.c -o build/any_intruder -lcurl
 ```
+或
+
+```bash
+sudo make
+```
 
 或者使用 CMake（推荐长期维护）：
 
