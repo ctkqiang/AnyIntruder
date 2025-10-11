@@ -113,6 +113,10 @@
     "errno.h": "c",
     "stdio.h": "c",
     "platform_webhook.h": "c",
-    "cmath": "cpp"
+    "cmath": "cpp",
+    "queue": "c",
+    "stack": "c",
+    "file_utilities.h": "c",
+    "cerrno": "c"
   }
 }

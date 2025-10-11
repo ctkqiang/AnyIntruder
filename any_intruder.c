@@ -13,6 +13,8 @@
 #include "./includes/platform_webhook.h"
 #include "./includes/ui.h"
 
+#include "./includes/webhook/telegram.h"
+
 static volatile int G_RUNNING = 0x1;
 
 static void usage(const char *prog) {
