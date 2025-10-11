@@ -134,6 +134,10 @@ int main(int argc, char **argv) {
                         fprintf(stderr, "Failed to send log to %s: %s\n", plat_str, strerror(errno));
                         return 0x1;
                     }
+
+                    free(log_content);
+
+                    return 0x0;
                 } else {
                     target_platform = -0x1;
                 }

@@ -11,6 +11,7 @@
 
 /**
  * @brief 使用给定的 JSON 有效负载向指定 URL 发送 Webhook 请求。
+ * 该函数根据指定的平台和 URL 发送包含 JSON 有效负载的 Webhook 请求。
  * 
  * @param platform 用于 Webhook 请求的平台。
  * @param url 发送 Webhook 请求的 URL。
