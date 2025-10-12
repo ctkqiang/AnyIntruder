@@ -16,6 +16,7 @@
 
 #include "./includes/webhook/telegram.h"
 #include "./includes/webhook/dingding.h"
+#include "./includes/webhook/discord.h"
 
 #define DEFAULT_LOG_FILE "anyintruder.log"
 
@@ -30,12 +31,11 @@ static void usage(const char *prog) {
 }
 
 Platform parse_platform(const char *arg) {
-    if (strcmp(arg, "dingtalk") == 0) return PLATFORM_DINGTALK;
+    if (strcmp(arg, "dingding") == 0) return PLATFORM_DINGDING;
     if (strcmp(arg, "slack") == 0) return PLATFORM_SLACK;
     if (strcmp(arg, "discord") == 0) return PLATFORM_DISCORD;
     if (strcmp(arg, "msteams") == 0) return PLATFORM_MSTEAMS;
     if (strcmp(arg, "telegram") == 0) return PLATFORM_TELEGRAM;
-    if (strcmp(arg, "dingtalk") == 0) return PLATFORM_DINGTALK;
     if (strcmp(arg, "wechat") == 0) return PLATFORM_WECHAT;
     if (strcmp(arg, "feishu") == 0) return PLATFORM_FEISHU;
     
@@ -55,7 +55,7 @@ static void handle_sigint(int sig) {
     monitor_shutdown();
 }
 
-void dingding_cleanup() {
+void dingding_cleanup(DING_DING *dingding) {
     printf("[*] Cleaning up...\n");
     free(dingding);
 }
@@ -85,7 +85,7 @@ int send_to(Platform Platform, const char *log_content) {
 
             return dingding_send(&dingding, log_content, dingding_cleanup);
         case PLATFORM_DISCORD:
-            DISCORD discord;
+            Discord discord;
 
             char *webhook_url = yaml_get_value("discord_webhook_url");
 
@@ -94,7 +94,7 @@ int send_to(Platform Platform, const char *log_content) {
                 return -0x1;
             }
 
-            return discord_bot_send(discord, "user", log_content, NULL);
+            return discord_bot_send(&discord, "user", log_content, NULL);
         default:
             return -0x1;
     }

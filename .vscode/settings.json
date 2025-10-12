@@ -119,6 +119,7 @@
     "file_utilities.h": "c",
     "cerrno": "c",
     "bitset": "c",
-    "telegram.h": "c"
+    "telegram.h": "c",
+    "discord.h": "c"
   }
 }
