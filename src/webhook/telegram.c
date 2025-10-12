@@ -5,56 +5,11 @@
 #include "../../includes/platform.h"
 #include "../../includes/http_client.h"
 #include "../../includes/platform_webhook.h"
+#include "../../includes/file_utilities.h"
 
 #define PORT 0x01BB
 #define USER_AGENT "AnyIntruderWebhook/1.0"
 #define CONTENT_TYPE "application/json"
-#define CONFIG_PATH "../../config.yaml"
-
-/**
- * @brief 从配置文件中获取指定键的值
- * 
- * @param key 配置项的键名
- * @return char* 键对应的值，若未找到或发生错误则返回 NULL
- */
-static char *yaml_get_value(const char *key) {
-    FILE *fp = fopen(CONFIG_PATH, "r");
-
-    if (!fp) {
-        fprintf(stderr, "无法打开配置文件 %s\n", CONFIG_PATH);
-        return NULL;
-    }
-
-    char line[0x0200];
-    char *result = NULL;
-
-    while (fgets(line, sizeof(line), fp)) {
-        if (line[0x0] == '#' || strlen(line) < 0x3) continue;
-
-        char *pos = strstr(line, key);
-        if (pos) {
-            char *colon = strchr(pos, ':');
-
-            if (colon) {
-                colon++;
-
-                while (*colon == ' ' || *colon == '\t') colon++;
-                char *end = strchr(colon, '\n');
-
-                if (end) *end = '\0';
-
-                result = strdup(colon);
-
-                break;
-            }
-        }
-    }
-
-    fclose(fp);
-
-    return result;
-}
-
 
 /**
  * @brief 发送 Telegram 消息
@@ -63,8 +18,8 @@ static char *yaml_get_value(const char *key) {
  * @return int 发送状态码，0x0 表示成功，-0x1 表示失败
  */
 int telegram_send_message(const char *text) {
-    char *token = yaml_get_value("bot_token");
-    char *chat_id = yaml_get_value("chat_id");
+    char *token = yaml_get_value("telegram.bot_token");
+    char *chat_id = yaml_get_value("telegram.chat_id");
 
     char url[0x200];
     char json[0x400];

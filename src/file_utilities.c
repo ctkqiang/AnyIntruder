@@ -88,3 +88,49 @@ char *read_file_to_string(const char *path) {
     fclose(file_path);
     return buffer;
 }
+
+#define CONFIG_PATH "../../config.yaml"
+
+/** 
+ * @brief 从YAML配置文件中获取指定键的值
+ * 
+ * @param key 要获取的键名
+ * @return char* 对应的值字符串（需要在使用完后 free）
+ */
+char *yaml_get_value(const char *key) {
+    FILE *fp = fopen(CONFIG_PATH, "r");
+
+    if (!fp) {
+        fprintf(stderr, "无法打开配置文件 %s\n", CONFIG_PATH);
+        return NULL;
+    }
+
+    char line[0x0200];
+    char *result = NULL;
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (line[0x0] == '#' || strlen(line) < 0x3) continue;
+
+        char *pos = strstr(line, key);
+        if (pos) {
+            char *colon = strchr(pos, ':');
+
+            if (colon) {
+                colon++;
+
+                while (*colon == ' ' || *colon == '\t') colon++;
+                char *end = strchr(colon, '\n');
+
+                if (end) *end = '\0';
+
+                result = strdup(colon);
+
+                break;
+            }
+        }
+    }
+
+    fclose(fp);
+
+    return result;
+}

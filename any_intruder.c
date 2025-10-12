@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
                     }
 
                     free(log_content);
-
+ 
                     return 0x0;
                 } else {
                     target_platform = -0x1;
