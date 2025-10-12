@@ -2,3 +2,9 @@
 telegram:
   bot_token: xxxxxxxxxxxxxxx
   chat_id: xxxxxxxxxxxxxxxxx
+dingding:
+  token: xxxx
+  secret: xxxx
+discord:
+  webhook_url: xxxx
+  token: xxxx

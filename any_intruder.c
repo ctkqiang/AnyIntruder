@@ -84,6 +84,17 @@ int send_to(Platform Platform, const char *log_content) {
             }
 
             return dingding_send(&dingding, log_content, dingding_cleanup);
+        case PLATFORM_DISCORD:
+            DISCORD discord;
+
+            char *webhook_url = yaml_get_value("discord_webhook_url");
+
+            if(discord_bot_init(&discord, webhook_url) != 0x0) {
+                fprintf(stderr, "Failed to initialize discord webhook\n");
+                return -0x1;
+            }
+
+            return discord_bot_send(discord, "user", log_content, NULL);
         default:
             return -0x1;
     }
