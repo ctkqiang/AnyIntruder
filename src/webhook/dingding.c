@@ -56,7 +56,7 @@ static char *url_encode(const char *str) {
 
 int dingding_init(DING_DING *dingding) {
     assert(dingding != NULL );
-
+    
     char *access_token = yaml_get_value("dingding.token");
     char *secret = yaml_get_value("dingding.secret");
 
@@ -71,4 +71,95 @@ int dingding_init(DING_DING *dingding) {
     dingding->DINGDING_SECRET = secret;
 
     return 0x0;
+}
+
+/** 
+ * @brief 发送消息到DingDing
+ * 
+ * 该函数使用DingDing机器人的Webhook API发送文本消息。
+ * 消息内容会被包裹在JSON payload中，包含@all通知所有用户。
+ * 发送完成后，会调用指定的回调函数。
+ * 如果发送成功，会调用回调函数；如果失败，会打印错误信息。
+ * 
+ * @param dingding DingDing结构体指针
+ * @param message 要发送的消息
+ * @param then 发送完成后的回调函数
+ * @return int 发送状态码（成功为 0x0，失败为非零值）
+ */
+int dingding_send(DING_DING *dingding, char *message, void (*then) (void)) {
+    assert(dingding != NULL);
+    assert(message != NULL);
+
+    CURL *curl = curl_easy_init();
+    struct curl_slist *headers = NULL;
+
+    char url[0x0200];
+    char payload[0x0400];
+    char singature_string[0x0100];
+
+    struct timeval time_value;
+    gettimeofday(&time_value, NULL);
+    
+
+    long long timestamp = time_value.tv_sec * 0x03E8 + time_value.tv_usec / 0x03E8;
+
+    snprintf(singature_string, sizeof(singature_string), "%lld\n%s", timestamp, dingding->DINGDING_SECRET);
+    unsigned char *hmac = HMAC(
+        EVP_sha256(),
+        dingding->DINGDING_SECRET, strlen(dingding->DINGDING_SECRET),
+        (unsigned char *)singature_string, strlen(singature_string),
+        NULL, NULL
+    );
+
+    char *base64_signature = base64_encode(hmac, 0x20);
+    char *url_signature = url_encode(base64_signature);
+
+    if (!curl) {
+        fprintf(stderr, "Failed to init CURL\n");
+        free(base64_sig);
+        free(url_sig);
+        return -2;
+    }
+
+    snprintf(
+        url, 
+        sizeof(url),
+        "https://oapi.dingtalk.com/robot/send?access_token=%s&timestamp=%lld&sign=%s",
+        dingding->DINDING_ACCESS_TOKEN, 
+        timestamp, 
+        url_signature
+    );
+
+    snprintf(
+        payload, 
+        sizeof(payload),
+        "{\"msgtype\": \"text\", \"text\": {\"content\": \"%s\"}, \"at\": {\"atUserIds\": [\"@all\"]}}",
+        message
+    );
+    
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    CURLcode response = curl_easy_perform(curl);
+
+    if (response != CURLE_OK) {
+        fprintf(stderr, "Error sending message: %s\n", curl_easy_strerror(response));
+    }
+
+    printf("Message sent successfully.\n");
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    free(url_signature);
+    free(base64_signature);
+
+    if (then) then();
+    sleep(0x5);
+
+    return (response == CURLE_OK) ? 0x0 : -0x3;
 }

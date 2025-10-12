@@ -15,6 +15,7 @@
 #include "./includes/ui.h"
 
 #include "./includes/webhook/telegram.h"
+#include "./includes/webhook/dingding.h"
 
 #define DEFAULT_LOG_FILE "anyintruder.log"
 
@@ -54,7 +55,10 @@ static void handle_sigint(int sig) {
     monitor_shutdown();
 }
 
-
+void dingding_cleanup() {
+    printf("[*] Cleaning up...\n");
+    free(dingding);
+}
 
 /**
  * @brief
@@ -71,6 +75,15 @@ int send_to(Platform Platform, const char *log_content) {
     switch (Platform) {
         case PLATFORM_TELEGRAM:
             return telegram_send_message(log_content);
+        case PLATFORM_DINGDING:
+            DING_DING dingding;
+
+            if(dingding_init(&dingding) != 0x0) {
+                fprintf(stderr, "Failed to initialize dingding webhook\n");
+                return -0x1;
+            }
+
+            return dingding_send(&dingding, log_content, dingding_cleanup);
         default:
             return -0x1;
     }

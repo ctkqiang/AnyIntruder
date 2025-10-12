@@ -9,7 +9,7 @@ typedef enum Platform {
     PLATFORM_DISCORD    = (1 << 1),
     PLATFORM_MSTEAMS    = (1 << 2),
     PLATFORM_TELEGRAM   = (1 << 3),
-    PLATFORM_DINGTALK   = (1 << 4),
+    PLATFORM_DINGDING   = (1 << 4),
     PLATFORM_WECHAT     = (1 << 5),
     PLATFORM_FEISHU     = (1 << 6)
 } Platform;
