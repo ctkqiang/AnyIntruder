@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*' 
+      - 'v*.*'
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
@@ -15,10 +15,13 @@ jobs:
 
     - name: Install dependencies
       run: |
-        brew install libpcap ncurses
+        sudo apt-get update
+        sudo apt-get install -y libpcap-dev libncurses5-dev make gcc
 
     - name: Build project
-      run: make
+      run: |
+        make
+        chmod +x anyintruder
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
