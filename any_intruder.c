@@ -17,6 +17,7 @@
 #include "./includes/webhook/telegram.h"
 #include "./includes/webhook/dingding.h"
 #include "./includes/webhook/discord.h"
+#include "./includes/webhook/wechat.h"
 
 #define DEFAULT_LOG_FILE "anyintruder.log"
 
@@ -60,6 +61,11 @@ void dingding_cleanup(DING_DING *dingding) {
     free(dingding);
 }
 
+void wx_cleanup(WeChat *wechat) {
+    printf("[*] Cleaning up...\n");
+    free(wechat->webhook_url);
+}
+
 /**
  * @brief
  * 发送日志内容到指定平台
@@ -95,6 +101,16 @@ int send_to(Platform Platform, const char *log_content) {
             }
 
             return discord_bot_send(&discord, "user", log_content, NULL);
+
+        case PLATFORM_WECHAT:
+            WeChat bot;
+
+            if (wechat_bot_init(&bot, "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXXXXX") != 0x0) {
+                fprintf(stderr, "初始化失败\n");
+                return 0x1;
+            }
+
+            return wechat_bot_send(&bot, log_content, wx_cleanup);
         default:
             return -0x1;
     }

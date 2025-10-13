@@ -120,6 +120,7 @@
     "cerrno": "c",
     "bitset": "c",
     "telegram.h": "c",
-    "discord.h": "c"
+    "discord.h": "c",
+    "wechat.h": "c"
   }
 }
