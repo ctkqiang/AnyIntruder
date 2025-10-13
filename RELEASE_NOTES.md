@@ -1,6 +1,6 @@
 # AnyIntruder 发布说明
 
-## 版本 [你的版本号，例如：v1.0.0]
+## 版本 1.0
 
 ### 新功能
 - 增加了对 Telegram Webhook 的支持。
