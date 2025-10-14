@@ -14,7 +14,7 @@ typedef struct {
 
 int dingding_init(DING_DING *dingding);
 
-int dingding_send(DING_DING *dingding, char *message, void *(then)(void));
+int dingding_send(DING_DING *dingding, const char *message, void (*then)(DING_DING *));
 
 char *dingding_get_access_token(DING_DING *dingding);
 char *dingding_get_secret(DING_DING *dingding);

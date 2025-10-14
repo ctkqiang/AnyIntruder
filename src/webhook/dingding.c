@@ -1,3 +1,17 @@
+#include <unistd.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
+#include <openssl/hmac.h>
+#include <curl/curl.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
+#include <openssl/hmac.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
+#include <openssl/hmac.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -86,7 +100,7 @@ int dingding_init(DING_DING *dingding) {
  * @param then 发送完成后的回调函数
  * @return int 发送状态码（成功为 0x0，失败为非零值）
  */
-int dingding_send(DING_DING *dingding, char *message, void (*then) (void)) {
+int dingding_send(DING_DING *dingding, const char *message, void (*then)(DING_DING *)) {
     assert(dingding != NULL);
     assert(message != NULL);
 
@@ -116,8 +130,8 @@ int dingding_send(DING_DING *dingding, char *message, void (*then) (void)) {
 
     if (!curl) {
         fprintf(stderr, "Failed to init CURL\n");
-        free(base64_sig);
-        free(url_sig);
+        free(base64_signature);
+        free(url_signature);
         return -2;
     }
 
@@ -158,7 +172,7 @@ int dingding_send(DING_DING *dingding, char *message, void (*then) (void)) {
     free(url_signature);
     free(base64_signature);
 
-    if (then) then();
+    if (then) then(dingding);
     sleep(0x5);
 
     return (response == CURLE_OK) ? 0x0 : -0x3;

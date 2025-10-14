@@ -29,7 +29,7 @@ int wechat_bot_init(WeChat *wechat, const char *webhook_url) {
  * 企业微信发送文本消息（使用官方 webhook REST 接口）
  * 文档参考：https://developer.work.weixin.qq.com/document/path/91770
  */
-int wechat_bot_send(WeChat *wechat, const char *message, void (*then)(void)) {
+int wechat_bot_send(WeChat *wechat, const char *message, void (*then)(WeChat *)) {
     char payload[0x1000];
  
     if (!wechat || !wechat->webhook_url || !message) {
@@ -77,7 +77,7 @@ int wechat_bot_send(WeChat *wechat, const char *message, void (*then)(void)) {
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
-    if (then) then();
+    if (then) then(wechat);
 
     return 0x0;
 }

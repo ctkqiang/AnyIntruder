@@ -78,42 +78,51 @@ void wx_cleanup(WeChat *wechat) {
  * @return int 发送状态码（成功为 0x0，失败为非零值）
  */
 int send_to(Platform Platform, const char *log_content) {
+    DING_DING dingding;
+    Discord discord;
+    WeChat bot;
+    char *webhook_url;
+    int result = -0x1;
+
     switch (Platform) {
         case PLATFORM_TELEGRAM:
             return telegram_send_message(log_content);
-        case PLATFORM_DINGDING:
-            DING_DING dingding;
 
+        case PLATFORM_DINGDING:
             if(dingding_init(&dingding) != 0x0) {
                 fprintf(stderr, "Failed to initialize dingding webhook\n");
                 return -0x1;
             }
+            result = dingding_send(&dingding, log_content, dingding_cleanup);
+            break;
 
-            return dingding_send(&dingding, log_content, dingding_cleanup);
         case PLATFORM_DISCORD:
-            Discord discord;
-
-            char *webhook_url = yaml_get_value("discord_webhook_url");
-
+            webhook_url = yaml_get_value("discord_webhook_url");
             if(discord_bot_init(&discord, webhook_url) != 0x0) {
                 fprintf(stderr, "Failed to initialize discord webhook\n");
                 return -0x1;
             }
-
-            return discord_bot_send(&discord, "user", log_content, NULL);
+            result = discord_bot_send(&discord, "user", log_content, NULL);
+            break;
 
         case PLATFORM_WECHAT:
-            WeChat bot;
-
-            if (wechat_bot_init(&bot, "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=XXXXXX") != 0x0) {
+            if (wechat_bot_init(&bot, "https://qyapi.d?key=XXXXXX") != 0x0) {
                 fprintf(stderr, "初始化失败\n");
                 return 0x1;
             }
+            result = wechat_bot_send(&bot, log_content, wx_cleanup);
+            break;
 
-            return wechat_bot_send(&bot, log_content, wx_cleanup);
-        default:
-            return -0x1;
+        case PLATFORM_SLACK:
+        case PLATFORM_MSTEAMS:
+        case PLATFORM_NONE:
+        case PLATFORM_FEISHU:
+            fprintf(stderr, "Platform not implemented yet\n");
+            result = -0x1;
+            break;
     }
+    
+    return result;
 }
 
 /**

@@ -1,7 +1,7 @@
 CC := gcc
 PKG := pkg-config
 TARGET := anyintruder
-SRCS := any_intruder.c src/monitor.c src/logger.c src/ui.c src/file_utilities.c src/webhook/telegram.c src/platform_webhook.c src/http_client.c
+SRCS := any_intruder.c src/monitor.c src/logger.c src/ui.c src/file_utilities.c src/webhook/telegram.c src/platform_webhook.c src/http_client.c src/webhook/dingding.c src/webhook/discord.c src/webhook/wechat.c
 OBJS := $(SRCS:.c=.o)
 
 BREW_PCAP := $(shell command -v brew >/dev/null 2>&1 && brew --prefix libpcap 2>/dev/null || echo)
@@ -17,11 +17,11 @@ PCAP_LIBS   := $(shell PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG) --libs libpca
 NCURSES_CFLAGS := $(shell $(PKG) --cflags ncurses 2>/dev/null || echo)
 NCURSES_LIBS   := $(shell $(PKG) --libs ncurses 2>/dev/null || echo)
 
-CFLAGS := -Wall -O2 -Iinclude -pthread $(PCAP_CFLAGS) $(NCURSES_CFLAGS)
-LIBS := $(PCAP_LIBS) $(NCURSES_LIBS)
+CFLAGS := -Wall -O2 -Iinclude $(shell pkg-config --cflags openssl) $(shell pkg-config --cflags libcurl) $(shell pkg-config --cflags json-c) -pthread $(PCAP_CFLAGS) $(NCURSES_CFLAGS)
+LIBS := $(shell pkg-config --libs openssl) $(shell pkg-config --libs libcurl) $(shell pkg-config --libs json-c) $(PCAP_LIBS) $(NCURSES_LIBS)
 
 ifeq ($(strip $(LIBS)),)
-LIBS := -lpcap -lncurses
+LIBS := -L/usr/local/opt/openssl/lib -lpcap -lncurses -lssl -lcrypto
 endif
 
 .PHONY: all run clean

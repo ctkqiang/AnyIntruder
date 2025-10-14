@@ -22,6 +22,6 @@ int wechat_bot_init(WeChat *wechat, const char *webhook_url);
  * @param message - 文本内容
  * @param then - 发送完成回调函数（可为空）
  */
-int wechat_bot_send(WeChat *wechat, const char *message, void (*then)(void));
+int wechat_bot_send(WeChat *wechat, const char *message, void (*then)(WeChat *));
 
 #endif
