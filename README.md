@@ -22,6 +22,9 @@
 
 ## 快速开始
 
+### 程序流程
+![sequence](./out/assets/sequence/sequence.png)
+
 ### 列出可用网络接口
 
 ```bash

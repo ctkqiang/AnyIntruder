@@ -1,0 +1,60 @@
+@startuml
+!theme crt-amber
+
+' 参与者定义
+actor 用户
+participant "主程序\n(Main)" as main
+participant "监控模块\n(Monitor)" as monitor
+participant "日志模块\n(Logger)" as logger
+participant "UI模块\n(UI)" as ui
+participant "告警模块\n(Webhook)" as webhook
+
+' 初始化阶段
+用户 -> main: 启动程序
+main -> logger: logger_init()
+logger --> main: 初始化完成
+main -> monitor: monitor_init(iface)
+monitor --> main: 抓包线程已准备
+main -> ui: ui_run()
+ui --> main: UI 启动成功
+
+' 抓包与事件处理（激活 monitor）
+activate monitor
+monitor -> monitor: 抓包线程运行()
+loop 持续抓包
+  monitor -> monitor: got_packet()
+  alt SYN 攻击检测
+    monitor -> monitor: update_attacker(ip, port)
+  else HTTP/SSH 请求
+    monitor -> monitor: add_event(ip, port, summary)
+    monitor -> logger: logger_log_event(event)
+    logger --> monitor: 事件记录完成
+  end
+end
+' 注意：这里 monitor 保持激活状态直到 shutdown
+
+' UI 更新（单独激活 ui）
+activate ui
+loop 每 1 秒刷新
+  ui -> monitor: monitor_get_top()
+  monitor --> ui: 攻击者列表
+  ui -> monitor: monitor_get_events()
+  monitor --> ui: 事件列表
+  ui -> ui: draw_top() / draw_events()
+end
+deactivate ui
+
+' 告警发送（可选路径）
+alt 指定了发送平台
+  main -> webhook: send_to(platform, log_content)
+  webhook --> main: 告警发送成功
+end
+
+' 关闭阶段（顺序关闭组件）
+用户 -> main: Ctrl+C（SIGINT）
+main -> monitor: monitor_shutdown()
+deactivate monitor
+main -> logger: logger_shutdown()
+logger --> main: 日志模块已关闭
+main -> ui: 终止 UI
+@enduml
