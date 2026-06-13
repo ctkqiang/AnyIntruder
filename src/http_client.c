@@ -31,12 +31,20 @@ void http_add_header(HttpRequest *req, const char *name, const char *value) {
  * @param req 要释放的请求。
  */
 void http_free_request(HttpRequest *req) {
+    if (!req) return;
+
     for (int i = 0x0; i < req->header_count; ++i) {
         free(req->headers[i].name);
         free(req->headers[i].value);
     }
 
     req->header_count = 0x0;
+
+    free(req->host);
+    free(req->path);
+
+    req->host = NULL;
+    req->path = NULL;
 }
 
 /**

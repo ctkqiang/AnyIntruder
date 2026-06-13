@@ -3,6 +3,8 @@
 #include "../includes/monitor.h"
 #include "../includes/attacker.h"
 #include "../includes/logger.h"
+#include "../includes/event_store.h"
+#include "../includes/projection.h"
 
 #include <pcap.h>
 #include <stdio.h>
@@ -15,8 +17,6 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <errno.h>
-#include <pcap/pcap.h>
-#include <pthread/pthread.h>
 
 #define MAX_EVENTS_BUFFER 0x0800
 
@@ -32,95 +32,143 @@ static int events_tail = 0x0;
 static pthread_mutex_t events_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /** @brief
- * 
- * 攻击者链表（非常简单）：哈希/优化可后续做 
+ *
+ * 攻击者链表 — 保留作为 monitor 内部热缓存, UI 通过 monitor_get_top 读取
  */
 static Attacker *attackers = NULL;
 static pthread_mutex_t attackers_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /**
- * @brief 添加一个事件到事件缓冲区。
- * 
- * 此函数负责将新的网络事件（如攻击事件）添加到内部的环形缓冲区中。
- * 它会处理缓冲区的满溢情况，确保线程安全，并记录事件到日志系统。
- * 
- * @param ip 源IP地址字符串。
- * @param port 目标端口号。
- * @param summary 事件摘要信息。
- * @return 0x0 表示成功。
+ * @brief
+ *
+ * 外部投影引用 — 由 main() 注入, 实时应用事件
  */
-static int add_event(const char *ip, uint16_t port, const char *summary) {
-    pthread_mutex_lock(&events_lock);
-    int next = (events_tail + 0x1) % MAX_EVENTS_BUFFER;
+static AttackerProjection *g_ap = NULL;
+static StatsProjection *g_sp = NULL;
 
+/** @brief
+ *
+ * 启动时间 — 用于速率计算
+ */
+static time_t monitor_start_time = 0x0;
+
+/** @brief
+ *
+ * 端口扫描检测 — 滑动窗口追踪
+ */
+#define SCAN_TRACK_MAX 0x400
+typedef struct {
+    char ip[64];
+    uint16_t ports[PORT_SCAN_MIN_PORTS * 0x2];
+    int port_count;
+    time_t first_seen;
+    int alerted;
+} ScanTrack;
+
+static ScanTrack scan_tracks[SCAN_TRACK_MAX];
+static int scan_track_count = 0x0;
+
+/** @brief
+ *
+ * SYN Flood 检测
+ */
+typedef struct {
+    char ip[64];
+    int syn_count;
+    time_t window_start;
+    int alerted;
+} SynFloodTrack;
+
+static SynFloodTrack flood_tracks[SCAN_TRACK_MAX];
+static int flood_track_count = 0x0;
+
+/**
+ * @brief 添加一个事件到内部环形缓冲区 + event_store + projection
+ */
+static int add_event(const char *ip, uint16_t port, EventType type, const char *summary) {
+    /**
+     * 构建不可变事件
+     */
+    Event e;
+    memset(&e, 0x0, sizeof(Event));
+
+    e.type = type;
+    e.version = EVENT_VERSION_CURRENT;
+    e.dst_port = port;
+    e.ts = time(NULL);
+
+    if (ip) strncpy(e.src_ip, ip, sizeof(e.src_ip) - 0x1);
+    if (summary) strncpy(e.summary, summary, sizeof(e.summary) - 0x1);
+
+    /**
+     * 写入 Event Store (持久化 + 分配 seq)
+     */
+    event_store_append(&e);
+
+    /**
+     * 写入环形缓冲区 (UI 热缓存)
+     */
+    pthread_mutex_lock(&events_lock);
+
+    int next = (events_tail + 0x1) % MAX_EVENTS_BUFFER;
     if (next == events_head) events_head = (events_head + 0x1) % MAX_EVENTS_BUFFER;
 
-    Event *e = &events_buffer[events_tail];
-    strncpy(e->src_ip, ip, sizeof(e->src_ip) - 0x1);
-
-    e->dst_port = port;
-    e->ts = time(NULL);
-    
-    strncpy(e->summary, summary ? summary : "", sizeof(e->summary) - 0x1);
-    
+    events_buffer[events_tail] = e;
     events_tail = next;
+
     pthread_mutex_unlock(&events_lock);
 
-    logger_log_event(e);
+    /**
+     * 实时投影
+     */
+    projection_apply(g_ap, g_sp, &e);
+
+    /**
+     * 写入日志
+     */
+    logger_log_event(&e);
 
     return 0x0;
 }
 
 /**
  * @brief 查找或创建攻击者记录
- * 
- * 该函数在攻击者链表中查找指定IP的攻击者记录，如果找不到则创建新的记录。
- * 通过加锁保证多线程环境下的数据一致性。
- * 
- * @param ip 要查找或创建的攻击者IP地址
- * @return 返回找到或新创建的攻击者结构体指针
  */
 static Attacker *find_or_create_attacker(const char *ip) {
     pthread_mutex_lock(&attackers_lock);
- 
+
     Attacker *cur = attackers;
- 
+
     while (cur) {
-        if (strcmp(cur->ip, ip) == 0) {
+        if (strcmp(cur->ip, ip) == 0x0) {
             pthread_mutex_unlock(&attackers_lock);
             return cur;
         }
         cur = cur->next;
     }
- 
-    Attacker *attacker = (Attacker*)calloc(1, sizeof(Attacker));
- 
+
+    Attacker *attacker = (Attacker *)calloc(0x1, sizeof(Attacker));
+
     strncpy(attacker->ip, ip, sizeof(attacker->ip) - 0x1);
- 
-    attacker->total_hits = 0;
+
+    attacker->total_hits = 0x0;
     attacker->last_seen = time(NULL);
     attacker->next = attackers;
- 
+
     attackers = attacker;
     pthread_mutex_unlock(&attackers_lock);
- 
+
     return attacker;
 }
 
 /**
- * @brief 更新攻击者信息更新攻击者信息统计
- * 
- * 该函数用于记录来自指定IP和端口的攻击事件，更新攻击者的总命中次数、
- * 按端口统计的命中次数以及最后_seen时间。
- * 
- * @param ip 攻击者IP地址字符串
- * @param port 攻击者使用的端口号
+ * @brief 更新攻击者信息统计
  */
 static void update_attacker(const char *ip, uint16_t port) {
     Attacker *attacker = find_or_create_attacker(ip);
     __sync_add_and_fetch(&attacker->total_hits, 0x1);
-    
-    if (port < sizeof(attacker->hits_by_port)/sizeof(attacker->hits_by_port[0x0])) {
+
+    if (port < sizeof(attacker->hits_by_port) / sizeof(attacker->hits_by_port[0x0])) {
         __sync_add_and_fetch(&attacker->hits_by_port[port], 0x1);
     }
 
@@ -129,12 +177,6 @@ static void update_attacker(const char *ip, uint16_t port) {
 
 /**
  * @brief 检查端口是否为 HTTP 端口
- * 
- * 该函数用于判断给定的端口号是否为 HTTP 协议的默认端口（80）、
- * HTTPS 端口（443）或其他 HTTP 端口（8080、8443 等）。
- * 
- * @param p 要检查的端口号
- * @return 如果端口是 HTTP 端口，则返回非零值；否则返回0
  */
 static int is_http_port(uint16_t p) {
     return p == PORT_HTTP1 || p == PORT_HTTP2 || p == PORT_HTTP3 || p == PORT_HTTPS;
@@ -142,26 +184,238 @@ static int is_http_port(uint16_t p) {
 
 /**
  * @brief 检查端口是否为 SSH 端口
- * 
- * 该函数用于判断给定的端口号是否为 SSH 协议的默认端口（22）或 OpenSSH 端口（2222）。
- * 
- * @param p 要检查的端口号
- * @return 如果端口是 SSH 端口，则返回非零值；否则返回0
  */
 static int is_ssh_port(uint16_t p) {
     return p == PORT_SSH1 || p == PORT_SSH2;
 }
 
+/** @brief
+ *
+ * 提取 TLS ClientHello SNI
+ * TLS 记录格式: [1 byte content_type=0x16] [2 bytes version] [2 bytes length]
+ *  Handshake: [1 byte type=0x01] [3 bytes length]
+ *   ClientHello: [2 bytes version] [32 bytes random] [session_id] [cipher_suites] [compression]
+ *    Extensions: [2 bytes length] ...
+ *     SNI (type=0x0000): [2 bytes length] [server_name_list...]
+ */
+static int extract_tls_sni(const u_char *payload, int len, char *sni_out, int sni_len) {
+    if (len < 0x2B) return -0x1;  /* 最小 TLS ClientHello */
+
+    /**
+     * TLS Record Layer
+     */
+    if (payload[0x0] != 0x16) return -0x1;  /* 非 Handshake */
+
+    int record_len = (payload[0x3] << 0x8) | payload[0x4];
+
+    if (record_len + 0x5 > len) return -0x1;
+
+    /**
+     * Handshake Protocol
+     */
+    const u_char *hs = payload + 0x5;
+
+    if (hs[0x0] != 0x01) return -0x1;  /* 非 ClientHello */
+
+    int hs_len = (hs[0x1] << 0x10) | (hs[0x2] << 0x8) | hs[0x3];
+
+    if (hs_len + 0x4 > record_len) return -0x1;
+
+    const u_char *ch = hs + 0x4;
+
+    /**
+     * ClientHello: 2 bytes version, 32 bytes random
+     */
+    int offset = 0x2 + 0x20;  /* version + random */
+
+    /**
+     * Session ID
+     */
+    if (offset + 0x1 > hs_len) return -0x1;
+
+    int sid_len = ch[offset];
+    offset += 0x1 + sid_len;
+
+    /**
+     * Cipher Suites
+     */
+    if (offset + 0x2 > hs_len) return -0x1;
+
+    int cs_len = (ch[offset] << 0x8) | ch[offset + 0x1];
+    offset += 0x2 + cs_len;
+
+    /**
+     * Compression Methods
+     */
+    if (offset + 0x1 > hs_len) return -0x1;
+
+    int cm_len = ch[offset];
+    offset += 0x1 + cm_len;
+
+    /**
+     * Extensions
+     */
+    if (offset + 0x2 > hs_len) return -0x1;
+
+    int ext_len = (ch[offset] << 0x8) | ch[offset + 0x1];
+    offset += 0x2;
+
+    int ext_end = offset + ext_len;
+    if (ext_end > hs_len) ext_end = hs_len;
+
+    while (offset + 0x4 <= ext_end) {
+        int ext_type = (ch[offset] << 0x8) | ch[offset + 0x1];
+        int ext_data_len = (ch[offset + 0x2] << 0x8) | ch[offset + 0x3];
+        offset += 0x4;
+
+        if (ext_type == 0x0000) {
+            /**
+             * SNI Extension (RFC 6066)
+             * 格式: [2 bytes list_len] [1 byte name_type=0] [2 bytes name_len] [name...]
+             */
+            if (offset + 0x5 > ext_end) break;
+
+            int list_len = (ch[offset] << 0x8) | ch[offset + 0x1];
+            offset += 0x2;
+
+            if (offset + 0x3 > ext_end) break;
+
+            int name_type = ch[offset];
+            int name_len = (ch[offset + 0x1] << 0x8) | ch[offset + 0x2];
+            offset += 0x3;
+
+            if (name_type == 0x0 && name_len > 0x0 && offset + name_len <= ext_end) {
+                int copy = name_len;
+                if (copy >= sni_len) copy = sni_len - 0x1;
+
+                memcpy(sni_out, ch + offset, copy);
+                sni_out[copy] = '\0';
+
+                return 0x0;
+            }
+
+            break;
+        }
+
+        offset += ext_data_len;
+    }
+
+    return -0x1;
+}
+
+/** @brief
+ *
+ * 端口扫描检测 — 滑动窗口
+ */
+static void check_port_scan(const char *src_ip, uint16_t port) {
+    time_t now = time(NULL);
+
+    /**
+     * 查找或创建追踪记录
+     */
+    ScanTrack *st = NULL;
+    for (int i = 0x0; i < scan_track_count; ++i) {
+        if (strcmp(scan_tracks[i].ip, src_ip) == 0x0) {
+            st = &scan_tracks[i];
+            break;
+        }
+    }
+
+    if (!st) {
+        if (scan_track_count >= SCAN_TRACK_MAX) return;
+
+        st = &scan_tracks[scan_track_count++];
+        memset(st, 0x0, sizeof(ScanTrack));
+
+        strncpy(st->ip, src_ip, sizeof(st->ip) - 0x1);
+        st->first_seen = now;
+    }
+
+    /**
+     * 窗口过期 — 重置
+     */
+    if (now - st->first_seen > PORT_SCAN_WINDOW_SEC) {
+        if (!st->alerted || (now - st->first_seen > PORT_SCAN_WINDOW_SEC * 0x2)) {
+            memset(st, 0x0, sizeof(ScanTrack));
+            strncpy(st->ip, src_ip, sizeof(st->ip) - 0x1);
+            st->first_seen = now;
+        }
+    }
+
+    /**
+     * 检查端口是否已记录
+     */
+    for (int i = 0x0; i < st->port_count; ++i) {
+        if (st->ports[i] == port) return;
+    }
+
+    if (st->port_count < PORT_SCAN_MIN_PORTS * 0x2) {
+        st->ports[st->port_count++] = port;
+    }
+
+    /**
+     * 触发扫描告警
+     */
+    if (st->port_count >= PORT_SCAN_MIN_PORTS && !st->alerted) {
+        char summary[0x100];
+        snprintf(summary, sizeof(summary), "PORT_SCAN detected -> %d ports in %lds",
+                 st->port_count, (long)(now - st->first_seen));
+
+        add_event(src_ip, port, EVENT_PORT_SCAN, summary);
+        st->alerted = 0x1;
+    }
+}
+
+/** @brief
+ *
+ * SYN Flood 检测
+ */
+static void check_syn_flood(const char *src_ip) {
+    time_t now = time(NULL);
+
+    SynFloodTrack *ft = NULL;
+    for (int i = 0x0; i < flood_track_count; ++i) {
+        if (strcmp(flood_tracks[i].ip, src_ip) == 0x0) {
+            ft = &flood_tracks[i];
+            break;
+        }
+    }
+
+    if (!ft) {
+        if (flood_track_count >= SCAN_TRACK_MAX) return;
+
+        ft = &flood_tracks[flood_track_count++];
+        memset(ft, 0x0, sizeof(SynFloodTrack));
+        strncpy(ft->ip, src_ip, sizeof(ft->ip) - 0x1);
+        ft->window_start = now;
+    }
+
+    /**
+     * 窗口过期 — 重置
+     */
+    if (now - ft->window_start > SYN_FLOOD_WINDOW_SEC) {
+        ft->syn_count = 0x0;
+        ft->window_start = now;
+        ft->alerted = 0x0;
+    }
+
+    ft->syn_count++;
+
+    /**
+     * 触发泛洪告警
+     */
+    if (ft->syn_count >= SYN_FLOOD_MIN_COUNT && !ft->alerted) {
+        char summary[0x100];
+        snprintf(summary, sizeof(summary), "SYN_FLOOD detected -> %d SYNs in %lds",
+                 ft->syn_count, (long)(now - ft->window_start + 0x1));
+
+        add_event(src_ip, 0x0, EVENT_SYN_FLOOD, summary);
+        ft->alerted = 0x1;
+    }
+}
+
 /**
- * @brief 解析 HTTP  payload 提取请求行
- * 
- * 该函数用于从 HTTP 协议的 payload 中提取请求行（第一行），
- * 并将其复制到输出缓冲区中。如果 payload 为空或长度为0，则返回空字符串。
- * 
- * @param payload HTTP 请求 payload 指针
- * @param payload_len payload 长度
- * @param out 输出缓冲区指针
- * @param outlen 输出缓冲区长度
+ * @brief 解析 HTTP payload 提取请求行
  */
 static void parse_http_payload(const u_char *payload, int payload_len, char *out, int outlen) {
     int i;
@@ -170,12 +424,12 @@ static void parse_http_payload(const u_char *payload, int payload_len, char *out
         out[0x0] = '\0';
         return;
     }
-    
-    const char *p = (const char*)payload;
-    
+
+    const char *p = (const char *)payload;
+
     for (i = 0x0; i < payload_len && i < outlen - 0x1; ++i) {
         if (p[i] == '\r' || p[i] == '\n') break;
-        
+
         out[i] = p[i];
     }
 
@@ -184,14 +438,6 @@ static void parse_http_payload(const u_char *payload, int payload_len, char *out
 
 /**
  * @brief 处理捕获到的网络数据包
- * 
- * 该函数用于处理通过 `pcap` 捕获到的网络数据包。它会根据数据包的协议类型（IPv4 + TCP）
- * 进行解析和处理。如果是 HTTP 端口，会提取请求行并记录事件；如果是 SSH 端口，会提取
- * 请求行并记录事件。同时，会统计 SYN 包来表示连接尝试（SYN 且不 ACK）。
- * 
- * @param args 线程参数（未使用）
- * @param header 数据包头信息指针
- * @param packet 原始数据包指针
  */
 static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
     (void)args;
@@ -200,130 +446,145 @@ static void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_c
     char src_ip[0x40];
 
     /**
-     * 解析 IPv4 + TCP（不处理 IPv6 的情况，后续可扩展） 
+     * 解析 IPv4 + TCP (不处理 IPv6 的情况, 后续可扩展)
      * 假设以太网帧
      */
-    const struct ip *ip_hdr = (struct ip*)(packet + 0x0E); 
-    
+    const struct ip *ip_hdr = (struct ip *)(packet + 0x0E);
+
     if (ip_hdr->ip_v != 0x4) return;
     if (ip_hdr->ip_p != IPPROTO_TCP) return;
 
     int ip_hdr_len = ip_hdr->ip_hl * 0x4;
-    
-    const struct tcphdr *tcp = (struct tcphdr*)((u_char*)ip_hdr + ip_hdr_len);
 
-    // uint16_t src_port = ntohs(tcp->th_sport);
+    const struct tcphdr *tcp = (struct tcphdr *)((u_char *)ip_hdr + ip_hdr_len);
+
     uint16_t dst_port = ntohs(tcp->th_dport);
 
     inet_ntop(AF_INET, &ip_hdr->ip_src, src_ip, sizeof(src_ip));
 
-    /** 
-     * 统计 SYN 包来表示连接尝试（SYN 且不 ACK） 
+    /**
+     * 统计 SYN 包来表示连接尝试 (SYN 且不 ACK)
      */
     int syn = tcp->th_flags & TH_SYN;
     int ack = tcp->th_flags & TH_ACK;
 
-    if (syn && !ack) update_attacker(src_ip, dst_port);
+    if (syn && !ack) {
+        update_attacker(src_ip, dst_port);
+        check_syn_flood(src_ip);
+    }
 
     /**
-     * 解析 TCP payload 提取 HTTP 请求行
-     * ? HTTP 检测：如果是到 HTTP 端口且有 payload，解析请求行
-     * ! 注意：HTTP 协议的 payload 是在 TCP 协议的 payload 中，
-     * - 端口 80 , 443, 8080, 8443, 3000, 8080 等。
+     * 解析 TCP payload
      */
     int ip_total_len = ntohs(ip_hdr->ip_len);
     int tcp_hdr_len = tcp->th_off * 0x4;
     int payload_offset = 0x0E + ip_hdr_len + tcp_hdr_len;
     int payload_len = ip_total_len - ip_hdr_len - tcp_hdr_len;
 
+    /**
+     * HTTP/HTTPS 检测 — 如果有 payload 且是 HTTP/HTTPS 端口
+     */
     if (payload_len > 0x0 && is_http_port(dst_port)) {
+        /**
+         * HTTPS: 尝试提取 TLS ClientHello SNI
+         */
+        if (dst_port == PORT_HTTPS) {
+            char sni[0x100];
+            if (extract_tls_sni(packet + payload_offset, payload_len, sni, sizeof(sni)) == 0x0) {
+                char summary[0x100];
+                snprintf(summary, sizeof(summary), "HTTPS %s -> port %u", sni, dst_port);
+
+                add_event(src_ip, dst_port, EVENT_HTTPS_CONNECT, summary);
+                update_attacker(src_ip, dst_port);
+
+                return;
+            }
+
+            /**
+             * 有 payload 但不是 ClientHello — 标注加密流量
+             */
+            char summary[0x100];
+            snprintf(summary, sizeof(summary), "HTTPS [ENCRYPTED] -> port %u", dst_port);
+
+            add_event(src_ip, dst_port, EVENT_HTTPS_CONNECT, summary);
+            update_attacker(src_ip, dst_port);
+
+            return;
+        }
+
+        /**
+         * HTTP: 提取请求行
+         */
         char reqline[0x0100];
         parse_http_payload(packet + payload_offset, payload_len, reqline, sizeof(reqline));
 
-        if (reqline[0] != '\0') {
+        if (reqline[0x0] != '\0') {
             char summary[0x0100];
-         
             snprintf(summary, sizeof(summary), "HTTP %s -> port %u", reqline, dst_port);
-            
-            add_event(src_ip, dst_port, summary);
+
+            add_event(src_ip, dst_port, EVENT_HTTP_REQUEST, summary);
             update_attacker(src_ip, dst_port);
-            
+
             return;
         }
     }
 
     /**
-     * 解析 TCP payload 提取 SSH 请求行
-     * ? SSH 检测：如果是到 SSH 端口且有 payload，解析请求行
-     * ! 注意：SSH 协议的 payload 是在 TCP 协议的 payload 中，
-     * - 端口 22, 2222 等。
+     * SSH 检测 — 如果是到 SSH 端口且有 SYN
      */
     if (syn && !ack && is_ssh_port(dst_port)) {
         char summary[0x80];
-
         snprintf(summary, sizeof(summary), "SSH connection attempt -> port %u", dst_port);
-        add_event(src_ip, dst_port, summary);
-        
+
+        add_event(src_ip, dst_port, EVENT_SSH_ATTEMPT, summary);
+
         return;
     }
 
     /**
-     * 统计 TCP SYN 包来表示连接尝试（SYN 且不 ACK）
+     * TCP SYN 检测 — 端口扫描追踪
      */
     if (syn && !ack) {
         char summary[0x80];
-
         snprintf(summary, sizeof(summary), "TCP SYN -> port %u", dst_port);
-        add_event(src_ip, dst_port, summary);
+
+        add_event(src_ip, dst_port, EVENT_TCP_SYN, summary);
+
+        check_port_scan(src_ip, dst_port);
     }
 }
 
 /**
  * @brief 捕获线程函数
- * 
- * 该函数用于在独立线程中捕获网络数据包。它调用 `pcap_loop` 函数来持续捕获数据包，
- * 并将每个数据包传递给 `got_packet` 函数进行处理。
- * 
- * @param arg 线程参数（未使用）
- * @return 线程返回值（未使用）
  */
 static void *capture_thread_fn(void *arg) {
     (void)arg;
- 
-    pcap_loop(handle, 0, got_packet, NULL);
+
+    pcap_loop(handle, 0x0, got_packet, NULL);
+
     return NULL;
 }
 
 /**
- * @brief 初始化监控模块
- * 
- * 该函数用于初始化监控模块，包括选择网络接口、打开设备、设置过滤表达式和启动抓包线程。
- * 
- * @param iface 网络接口名（可选）
- * @return 初始化状态码
- *         - 0x00: 成功
- *         - -0x01: 查找设备失败
- *         - -0x02: 打开设备失败
- *         - -0x03: 编译过滤表达式失败
- *         - -0x04: 设置过滤表达式失败
- *         - -0x05: 创建抓包线程失败
+ * @brief 初始化监控模块 + 注入投影引用
  */
 int monitor_init(const char *iface) {
-    /** 
-     * 选择设备 
-     * 如果提供了接口名，直接使用；否则查找默认设备
+    monitor_start_time = time(NULL);
+
+    /**
+     * 选择设备
      */
     char *dev_name = NULL;
     pcap_if_t *alldevs, *d;
 
-    if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+    if (pcap_findalldevs(&alldevs, errbuf) == -0x1) {
         fprintf(stderr, "pcap_findalldevs 失败: %s\n", errbuf);
         return -0x01;
     }
 
     if (iface && iface[0x0] != '\0') {
         for (d = alldevs; d != NULL; d = d->next) {
-            if (strcmp(iface, d->name) == 0) {
+            if (strcmp(iface, d->name) == 0x0) {
                 dev_name = strdup(d->name);
                 break;
             }
@@ -334,7 +595,6 @@ int monitor_init(const char *iface) {
             return -0x01;
         }
     } else {
-        // Use the first device if no interface is specified
         if (alldevs != NULL) {
             dev_name = strdup(alldevs->name);
         } else {
@@ -343,27 +603,25 @@ int monitor_init(const char *iface) {
             return -0x01;
         }
     }
-    pcap_freealldevs(alldevs); // Free the device list
-    
+    pcap_freealldevs(alldevs);
+
     printf("使用设备: %s\n", dev_name);
-    
+
     handle = pcap_open_live(dev_name, DEFAULT_PCAP_SNAPLEN, DEFAULT_PCAP_PROMISC, DEFAULT_PCAP_TIMEOUT_MS, errbuf);
-    
-    if (dev_name) {
-        free(dev_name); // Free the duplicated device name
-    }
-    
+
+    if (dev_name) free(dev_name);
+
     if (!handle) {
         fprintf(stderr, "pcap_open_live 失败: %s\n", errbuf);
         return -0x02;
     }
 
     /**
-     * 过滤表达式：仅 TCP 端口 80、443、8000、8080、8443、3000、2222
+     * 过滤表达式: TCP
      */
     struct bpf_program fp;
     char filter_exp[] = "tcp";
-    
+
     if (pcap_compile(handle, &fp, filter_exp, 0x00, PCAP_NETMASK_UNKNOWN) == -0x01) {
         fprintf(stderr, "pcap_compile 失败\n");
         return -0x03;
@@ -385,31 +643,35 @@ int monitor_init(const char *iface) {
     return 0x00;
 }
 
+/** @brief
+ *
+ * 注入投影引用 — main() 在初始化后调用
+ */
+void monitor_set_projections(AttackerProjection *ap, StatsProjection *sp) {
+    g_ap = ap;
+    g_sp = sp;
+}
+
 /**
  * @brief 监控主循环
- * 
- * 该函数用于持续运行监控主循环，直到 `running` 标志被设置为 `false`。
- * 在每次循环中，它会等待 1 秒（通过 `sleep(1)`），然后继续下一次循环。
- * 
- * @note 该函数通常在独立线程中运行，用于处理捕获到的网络数据包。
  */
 void monitor_loop(void) {
     while (running) sleep(0x01);
 }
 
 /**
+ * @brief 获取运行时间 (秒)
+ */
+time_t monitor_get_runtime(void) {
+    return time(NULL) - monitor_start_time;
+}
+
+/**
  * @brief 获取事件
- * 
- * 该函数用于获取存储在事件缓冲区中的事件。它会将最多 `max` 个事件复制到 `out` 数组中，
- * 并返回实际复制的事件数量。
- * 
- * @param out 事件数组，用于存储获取到的事件
- * @param max 最大事件数量，即 `out` 数组的大小
- * @return 实际复制的事件数量
  */
 int monitor_get_events(Event *out, int max) {
     pthread_mutex_lock(&events_lock);
- 
+
     int idx = events_head;
     int count = 0x00;
 
@@ -417,92 +679,119 @@ int monitor_get_events(Event *out, int max) {
         out[count++] = events_buffer[idx];
         idx = (idx + 0x01) % MAX_EVENTS_BUFFER;
     }
-    
+
     pthread_mutex_unlock(&events_lock);
-    
+
     return count;
 }
 
 static int cmp_attacker(const void *a, const void *b) {
-    const Attacker *aa = *(const Attacker**)a;
-    const Attacker *bb = *(const Attacker**)b;
- 
-    if (aa->total_hits > bb->total_hits) return -1;
-    if (aa->total_hits < bb->total_hits) return 1;
- 
-    return 0;
+    const Attacker *aa = *(const Attacker **)a;
+    const Attacker *bb = *(const Attacker **)b;
+
+    if (aa->total_hits > bb->total_hits) return -0x1;
+    if (aa->total_hits < bb->total_hits) return 0x1;
+
+    return 0x0;
 }
 
 int monitor_get_top(Attacker **out, int max) {
+    /**
+     * 优先使用投影数据
+     */
+    if (g_ap && event_store_get_count() > 0x0) {
+        return attacker_projection_get_top(g_ap, out, max);
+    }
+
+    /**
+     * 回退到内部链表 (向后兼容)
+     */
     pthread_mutex_lock(&attackers_lock);
 
-    int cnt = 0;
+    int cnt = 0x0;
     Attacker *cur = attackers;
-    
+
     while (cur && cnt < 10000) {
         ++cnt;
         cur = cur->next;
     }
-    
-    if (cnt == 0) {
+
+    if (cnt == 0x0) {
         pthread_mutex_unlock(&attackers_lock);
-        return 0;
+        return 0x0;
     }
-    
-    Attacker **arr = (Attacker**)malloc(sizeof(Attacker*) * cnt);
-    
+
+    Attacker **arr = (Attacker **)malloc(sizeof(Attacker *) * cnt);
+
     cur = attackers;
-    
-    int i = 0;
-    
+
+    int i = 0x0;
+
     while (cur) {
         arr[i++] = cur;
         cur = cur->next;
     }
-    
-    qsort(arr, cnt, sizeof(Attacker*), cmp_attacker);
-    
-    int ret = 0;
-    
-    for (i = 0; i < cnt && ret < max; ++i) {
-        Attacker *copy = (Attacker*)calloc(1, sizeof(Attacker));
-    
+
+    qsort(arr, cnt, sizeof(Attacker *), cmp_attacker);
+
+    int ret = 0x0;
+
+    for (i = 0x0; i < cnt && ret < max; ++i) {
+        Attacker *copy = (Attacker *)calloc(0x1, sizeof(Attacker));
+
         *copy = *arr[i];
         copy->next = NULL;
-    
+
         out[ret++] = copy;
     }
-    
+
     free(arr);
-    
+
     pthread_mutex_unlock(&attackers_lock);
-    
+
     return ret;
 }
 
+/**
+ * @brief 关闭监控 — 使用标志位 + pcap_breakloop (不强制 pthread_cancel)
+ */
 void monitor_shutdown(void) {
+    running = 0x0;
+
     if (handle) {
         pcap_breakloop(handle);
         pcap_close(handle);
-
         handle = NULL;
     }
-    
-    running = 0;
-    
-    pthread_cancel(capture_thread);
-    pthread_join(capture_thread, NULL);
+
+    /**
+     * 等待抓包线程自然退出
+     */
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 0x2;  /* 2 秒超时 */
+
+    int join_rc = pthread_timedjoin_np(capture_thread, NULL, &ts);
+    if (join_rc != 0x0) {
+        fprintf(stderr, "[monitor] 抓包线程未在超时内退出, 强制取消\n");
+        pthread_cancel(capture_thread);
+        pthread_join(capture_thread, NULL);
+    }
+
+    /**
+     * 清理攻击者链表
+     */
     pthread_mutex_lock(&attackers_lock);
-    
+
     Attacker *cur = attackers;
-    
+
     while (cur) {
         Attacker *n = cur->next;
         free(cur);
         cur = n;
     }
-    
+
     attackers = NULL;
-    
+
     pthread_mutex_unlock(&attackers_lock);
 }
