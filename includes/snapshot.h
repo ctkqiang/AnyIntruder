@@ -30,7 +30,7 @@ uint64_t snapshot_load(AttackerProjection *ap, StatsProjection *sp);
  * 在 snapshot_init 的目录下创建 snapshot_<seq>.db
  * return 0x0 成功
  */
-int snapshot_save(const AttackerProjection *ap, const StatsProjection *sp, uint64_t seq);
+int snapshot_save(AttackerProjection *ap, const StatsProjection *sp, uint64_t seq);
 
 /** @brief
  *

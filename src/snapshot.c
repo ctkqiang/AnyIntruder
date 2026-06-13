@@ -42,8 +42,6 @@ int snapshot_init(const char *dir) {
  * @brief 保存攻击者投影到 JSON 行
  */
 static void save_attacker_json(FILE *fp, const Attacker *a) {
-    char ts_buf[0x20];
-
     fprintf(fp, "{\"ip\":\"%s\",\"total_hits\":%llu,\"last_seen\":%ld",
             a->ip, (unsigned long long)a->total_hits, (long)a->last_seen);
 

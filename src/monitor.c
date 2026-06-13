@@ -275,8 +275,7 @@ static int extract_tls_sni(const u_char *payload, int len, char *sni_out, int sn
              */
             if (offset + 0x5 > ext_end) break;
 
-            int list_len = (ch[offset] << 0x8) | ch[offset + 0x1];
-            offset += 0x2;
+            offset += 0x2;  /* 跳过 list_len */
 
             if (offset + 0x3 > ext_end) break;
 
@@ -765,18 +764,9 @@ void monitor_shutdown(void) {
     }
 
     /**
-     * 等待抓包线程自然退出
+     * 等待抓包线程自然退出 (pcap_breakloop 会让 pcap_loop 返回)
      */
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 0x2;  /* 2 秒超时 */
-
-    int join_rc = pthread_timedjoin_np(capture_thread, NULL, &ts);
-    if (join_rc != 0x0) {
-        fprintf(stderr, "[monitor] 抓包线程未在超时内退出, 强制取消\n");
-        pthread_cancel(capture_thread);
-        pthread_join(capture_thread, NULL);
-    }
+    pthread_join(capture_thread, NULL);
 
     /**
      * 清理攻击者链表

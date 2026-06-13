@@ -29,6 +29,9 @@ if(NOT NCURSES_FOUND)
   message(STATUS "ncurses not found by pkg-config. UI will be disabled if ncurses missing.")
 endif()
 
+# pthread (通常系统自带)
+find_package(Threads REQUIRED)
+
 # include 与 link flags
 include_directories(${PCAP_INCLUDE_DIRS})
 link_directories(${PCAP_LIBRARY_DIRS})
@@ -40,19 +43,30 @@ if(NCURSES_FOUND)
   add_compile_options(${NCURSES_CFLAGS_OTHER})
 endif()
 
-# 源文件（按需修改）
+# 源文件
 set(SRCS
-  src/main.c
+  any_intruder.c
   src/monitor.c
   src/logger.c
   src/ui.c
+  src/http_client.c
+  src/platform_webhook.c
+  src/file_utilities.c
+  src/event_store.c
+  src/projection.c
+  src/snapshot.c
+  src/stats.c
+  src/webhook/telegram.c
+  src/webhook/dingding.c
+  src/webhook/discord.c
+  src/webhook/wechat.c
 )
 
 # 生成目标
 add_executable(anyintruder ${SRCS})
 
 # 链接库
-target_link_libraries(anyintruder ${PCAP_LIBRARIES})
+target_link_libraries(anyintruder ${PCAP_LIBRARIES} Threads::Threads)
 if(NCURSES_FOUND)
   target_link_libraries(anyintruder ${NCURSES_LIBRARIES})
 else()

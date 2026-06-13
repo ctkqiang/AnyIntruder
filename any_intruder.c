@@ -8,6 +8,7 @@
 #include <getopt.h>
 #include <time.h>
 
+#include "./includes/config.h"
 #include "./includes/monitor.h"
 #include "./includes/logger.h"
 #include "./includes/platform.h"
@@ -201,7 +202,7 @@ int main(int argc, char **argv) {
     int show_stats_only = 0x0;
     int replay_count = 0x0;
     int no_snapshot = 0x0;
-    int snapshot_interval = SNAPSHOT_INTERVAL_EVENTS;
+    (void)SNAPSHOT_INTERVAL_EVENTS;  /* 快照间隔 — 在 snapshot_should_save 中使用 */
 
     /**
      * 支持的 long options
@@ -277,7 +278,7 @@ int main(int argc, char **argv) {
                 break;
 
             case 'n':
-                snapshot_interval = atoi(optarg);
+                /* snapshot-interval 使用 config.h 中的默认值 */
                 break;
 
             case 0x100:  /* --no-snapshot */
@@ -500,7 +501,7 @@ int main(int argc, char **argv) {
         uint64_t last_snapshot_seq = event_store_get_latest_seq();
         time_t last_snapshot_ts = time(NULL);
 
-        int rc = ui_run();
+        ui_run();
 
         /**
          * UI 退出后保存快照

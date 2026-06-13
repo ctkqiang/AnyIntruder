@@ -277,9 +277,9 @@ int ui_run(void) {
          * 存储大小格式化
          */
         char size_str[0x20];
-        if (store_size >= 0x400 * 0x400) snprintf(size_str, sizeof(size_str), "%.1fMB", (double)store_size / (0x400.0 * 0x400.0));
-        else if (store_size >= 0x400) snprintf(size_str, sizeof(size_str), "%.1fKB", (double)store_size / 0x400.0);
-        else snprintf(size_str, sizeof(size_str), "%zuB", store_size);
+        if (store_size >= 1048576) snprintf(size_str, sizeof(size_str), "%.1fMB", (double)store_size / 1048576.0);
+        else if (store_size >= 1024) snprintf(size_str, sizeof(size_str), "%.1fKB", (double)store_size / 1024.0);
+        else snprintf(size_str, sizeof(size_str), "%lluB", (unsigned long long)store_size);
 
         werase(footer);
 
