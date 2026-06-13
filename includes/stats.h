@@ -54,7 +54,7 @@ void stats_record(RateTracker *rt, uint64_t bytes);
 /**
  * @brief 获取当前统计快照
  */
-void stats_get_snapshot(const RateTracker *rt, uint64_t total_events, StatsSnapshot *out);
+void stats_get_snapshot(RateTracker *rt, uint64_t total_events, StatsSnapshot *out);
 
 /**
  * @brief 关闭统计模块

@@ -45,7 +45,7 @@ int attacker_projection_init(AttackerProjection *ap) {
     if (!ap) return -0x1;
 
     memset(ap, 0x0, sizeof(AttackerProjection));
-    ap->lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&ap->lock, NULL);
 
     return 0x0;
 }
@@ -57,7 +57,7 @@ int stats_projection_init(StatsProjection *sp) {
     if (!sp) return -0x1;
 
     memset(sp, 0x0, sizeof(StatsProjection));
-    sp->lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&sp->lock, NULL);
 
     return 0x0;
 }
@@ -237,6 +237,7 @@ void attacker_projection_destroy(AttackerProjection *ap) {
     ap->head = NULL;
 
     pthread_mutex_unlock(&ap->lock);
+    pthread_mutex_destroy(&ap->lock);
 }
 
 /**
@@ -248,4 +249,5 @@ void stats_projection_destroy(StatsProjection *sp) {
     pthread_mutex_lock(&sp->lock);
     memset(sp, 0x0, sizeof(StatsProjection));
     pthread_mutex_unlock(&sp->lock);
+    pthread_mutex_destroy(&sp->lock);
 }

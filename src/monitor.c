@@ -751,6 +751,10 @@ int monitor_get_top(Attacker **out, int max) {
     return ret;
 }
 
+int monitor_is_running(void) {
+    return running;
+}
+
 /**
  * @brief 关闭监控 — 使用标志位 + pcap_breakloop (不强制 pthread_cancel)
  */

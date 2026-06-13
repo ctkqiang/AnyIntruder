@@ -66,7 +66,7 @@ static void save_attacker_json(FILE *fp, const Attacker *a) {
 /**
  * @brief 保存快照
  */
-int snapshot_save(const AttackerProjection *ap, const StatsProjection *sp, uint64_t seq) {
+int snapshot_save(AttackerProjection *ap, const StatsProjection *sp, uint64_t seq) {
     if (!ap || !sp) return -0x1;
 
     pthread_mutex_lock(&snapshot_lock);

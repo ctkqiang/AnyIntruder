@@ -28,6 +28,8 @@ static size_t index_len = 0x0;
 static uint64_t global_seq = 0x0;
 static uint64_t event_count = 0x0;
 
+#define FLUSH_BATCH 0x64  /* 每 100 条事件 flush 一次 */
+
 static pthread_mutex_t store_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /** @brief
@@ -193,7 +195,12 @@ int event_store_append(Event *e) {
         return -0x1;
     }
 
-    fflush(store_fp);
+    /** @brief
+     *
+     * 批量刷新 — 每 FLUSH_BATCH 条事件才 flush 一次
+     * 避免高流量时每个包都触发磁盘 I/O
+     */
+    if (event_count % FLUSH_BATCH == 0x0) fflush(store_fp);
 
     /** @brief
      *
@@ -394,6 +401,7 @@ void event_store_shutdown(void) {
     pthread_mutex_lock(&store_lock);
 
     if (store_fp) {
+        fflush(store_fp);  /* 确保所有缓冲事件落盘 */
         fclose(store_fp);
         store_fp = NULL;
     }

@@ -230,7 +230,7 @@ int ui_run(void) {
     WINDOW *ev_win   = newwin(height - top_h - footer_h, width, top_h, 0x0);
     WINDOW *footer   = newwin(footer_h, width, height - footer_h, 0x0);
 
-    nodelay(stdscr, TRUE);
+    timeout(0xC8);  /* 200ms timeout for getch() — UI refresh rate */
     int ch;
 
     if (has_colors()) wattron(footer, COLOR_PAIR(CP_TIMESTAMP));
@@ -238,7 +238,7 @@ int ui_run(void) {
     if (has_colors()) wattroff(footer, COLOR_PAIR(CP_TIMESTAMP));
     wrefresh(footer);
 
-    while ((ch = getch()) != 'q') {
+    while ((ch = getch()) != 'q' && monitor_is_running()) {
         if (ch == 'r') {
             draw_top(top_win);
             draw_events(ev_win);
@@ -306,8 +306,6 @@ int ui_run(void) {
         if (has_colors()) wattroff(footer, COLOR_PAIR(CP_BOX));
 
         wrefresh(footer);
-
-        usleep(0x00030D40);
     }
 
     delwin(top_win);

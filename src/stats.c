@@ -14,7 +14,7 @@ int stats_init(RateTracker *rt) {
     if (!rt) return -0x1;
 
     memset(rt, 0x0, sizeof(RateTracker));
-    rt->lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&rt->lock, NULL);
     rt->window_start = time(NULL);
 
     return 0x0;
@@ -75,12 +75,12 @@ void stats_record(RateTracker *rt, uint64_t bytes) {
 /**
  * @brief 获取当前统计快照
  */
-void stats_get_snapshot(const RateTracker *rt, uint64_t total_events, StatsSnapshot *out) {
+void stats_get_snapshot(RateTracker *rt, uint64_t total_events, StatsSnapshot *out) {
     if (!rt || !out) return;
 
     memset(out, 0x0, sizeof(StatsSnapshot));
 
-    pthread_mutex_lock((pthread_mutex_t *)&rt->lock);
+    pthread_mutex_lock(&rt->lock);
 
     out->events_per_sec_1min  = rt->rate_1min;
     out->events_per_sec_5min  = rt->rate_5min;
@@ -89,7 +89,7 @@ void stats_get_snapshot(const RateTracker *rt, uint64_t total_events, StatsSnaps
     out->start_time           = rt->window_start;
     out->last_event_time      = rt->last_event_ts;
 
-    pthread_mutex_unlock((pthread_mutex_t *)&rt->lock);
+    pthread_mutex_unlock(&rt->lock);
 }
 
 /**
@@ -100,4 +100,6 @@ void stats_shutdown(RateTracker *rt) {
 
     fprintf(stderr, "[stats] 已关闭 (总事件: %llu, 速率: %.2f/s)\n",
             (unsigned long long)rt->count, rt->rate_1min);
+
+    pthread_mutex_destroy(&rt->lock);
 }

@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
 
     int daemon_mode = 0x0;
     int show_stats_only = 0x0;
-    int replay_count = 0x0;
+    int replay_count = -0x1;  /* -1 = 未指定 --replay */
     int no_snapshot = 0x0;
     (void)SNAPSHOT_INTERVAL_EVENTS;  /* 快照间隔 — 在 snapshot_should_save 中使用 */
 

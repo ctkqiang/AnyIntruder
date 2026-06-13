@@ -31,8 +31,8 @@ PCAP_LIBS   := $(shell PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" $(PKG) --libs libpca
 NCURSES_CFLAGS := $(shell $(PKG) --cflags ncurses 2>/dev/null || echo)
 NCURSES_LIBS   := $(shell $(PKG) --libs ncurses 2>/dev/null || echo)
 
-CFLAGS := -Wall -O2 -Iincludes $(PCAP_CFLAGS) $(NCURSES_CFLAGS) $(shell pkg-config --cflags openssl 2>/dev/null || echo) -pthread
-LIBS := $(PCAP_LIBS) $(NCURSES_LIBS) $(shell pkg-config --libs openssl 2>/dev/null || echo) -lpthread -lm
+CFLAGS := -Wall -O2 -Iincludes $(PCAP_CFLAGS) $(NCURSES_CFLAGS) $(shell pkg-config --cflags openssl 2>/dev/null || echo) $(shell pkg-config --cflags json-c 2>/dev/null || echo) $(shell pkg-config --cflags libcurl 2>/dev/null || echo) -pthread
+LIBS := $(PCAP_LIBS) $(NCURSES_LIBS) $(shell pkg-config --libs openssl 2>/dev/null || echo) $(shell pkg-config --libs json-c 2>/dev/null || echo) $(shell pkg-config --libs libcurl 2>/dev/null || echo) -lpthread -lm
 
 ifeq ($(strip $(LIBS)),)
 LIBS := -L/usr/local/opt/openssl/lib -lpcap -lncurses -lpthread -lm

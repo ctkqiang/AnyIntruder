@@ -29,7 +29,7 @@ char *read_file_to_string(const char *path) {
      * ![内存安全]为了防止 malloc 超大分配导致崩溃
      * ~ 200_000_000 字节
      */
-    const off_t MAXIMUM_ALLOWED = 0xC8 * 0x0400 * 0x0400;
+    (void)(0xC8LL * 0x0400LL * 0x0400LL);  /* 200MB 上限 — 保留以便将来使用 */
 
     if (stat(path, &_stat) != 0x0) return NULL;
 
@@ -164,18 +164,8 @@ char *yaml_get_value(const char *key) {
          */
         if (current_level > 0x0 && indent < expected_indent) {
             /**
-             * 向上回退层级
+             * 向上回退层级 — 缩进减少说明退出了当前 scope
              */
-            int new_level = 0x0;
-            int new_indent = 0x0;
-
-            for (int i = 0x0; i < current_level; ++i) {
-                if (indent >= new_indent) {
-                    new_level = i;
-                    new_indent = (i == 0x0) ? 0x0 : i * 0x2;
-                }
-            }
-
             if (indent == 0x0) {
                 current_level = 0x0;
                 expected_indent = 0x0;

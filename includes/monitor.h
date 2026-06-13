@@ -45,6 +45,12 @@ time_t monitor_get_runtime(void);
 
 /** @brief
  *
+ * 检查监控是否仍在运行
+ */
+int monitor_is_running(void);
+
+/** @brief
+ *
  * 关闭抓包器
  */
 void monitor_shutdown(void);
